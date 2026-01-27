@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package events_bridge.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/qubic/bob-events-bridge/api/events-bridge/v1;eventsbridge";
+
+// Event represents a single event from the bob node
+message Event {
+    uint64 log_id = 1;
+    uint32 tick = 2;
+    uint32 epoch = 3;
+    uint32 event_type = 4;
+    string tx_hash = 5;
+    string timestamp = 6;
+    google.protobuf.Struct body = 7;
+}
+
+// TickInterval represents a range of ticks
+message TickInterval {
+    uint32 first_tick = 1;
+    uint32 last_tick = 2;
+}
+
+// EpochInfo contains information about a single epoch
+message EpochInfo {
+    uint32 epoch = 1;
+    repeated TickInterval intervals = 2;
+    uint64 total_events = 3;
+}
+
+// GetStatusResponse contains service status information
+message GetStatusResponse {
+    repeated EpochInfo epochs = 1;
+    uint32 current_epoch = 2;
+    uint32 last_processed_tick = 3;
+    int64 last_processed_log_id = 4;
+}
+
+// GetEventsForTickRequest is the request for getting events for a tick
+message GetEventsForTickRequest {
+    uint32 tick = 1;
+}
+
+// GetEventsForTickResponse contains events for a specific tick
+message GetEventsForTickResponse {
+    uint32 tick = 1;
+    uint32 epoch = 2;
+    repeated Event events = 3;
+}

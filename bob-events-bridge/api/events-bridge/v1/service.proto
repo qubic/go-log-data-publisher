@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package events_bridge.v1;
+
+option go_package = "github.com/qubic/bob-events-bridge/api/events-bridge/v1;eventsbridge";
+
+import "messages.proto";
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+// EventsBridgeService provides access to stored bob events
+service EventsBridgeService {
+    // GetStatus returns the current service status including available epochs and intervals
+    rpc GetStatus(google.protobuf.Empty) returns (GetStatusResponse) {
+        option (google.api.http) = {
+            get: "/v1/status"
+        };
+    }
+
+    // GetEventsForTick returns all events for a specific tick
+    rpc GetEventsForTick(GetEventsForTickRequest) returns (GetEventsForTickResponse) {
+        option (google.api.http) = {
+            post: "/v1/getEventsForTick"
+            body: "*"
+        };
+    }
+}
