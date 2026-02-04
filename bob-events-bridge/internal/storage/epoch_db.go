@@ -87,6 +87,33 @@ func (e *EpochDB) StoreEvent(event *eventsbridge.Event) error {
 	return nil
 }
 
+// StoreEvents stores multiple events in a single batch write with one fsync
+func (e *EpochDB) StoreEvents(events []*eventsbridge.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	batch := e.db.NewBatch()
+	defer batch.Close()
+
+	for _, event := range events {
+		key := FormatKey(event.Tick, event.LogId)
+		data, err := proto.Marshal(event)
+		if err != nil {
+			return fmt.Errorf("failed to marshal event: %w", err)
+		}
+		if err := batch.Set(key, data, nil); err != nil {
+			return fmt.Errorf("failed to set event in batch: %w", err)
+		}
+	}
+
+	if err := batch.Commit(pebble.Sync); err != nil {
+		return fmt.Errorf("failed to commit batch: %w", err)
+	}
+
+	return nil
+}
+
 // CountEventsForTick counts the number of events stored for a given tick using prefix scan
 func (e *EpochDB) CountEventsForTick(tick uint32) (uint32, error) {
 	prefix := []byte(fmt.Sprintf("%010d:", tick))

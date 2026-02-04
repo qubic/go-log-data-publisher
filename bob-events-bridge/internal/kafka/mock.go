@@ -36,6 +36,23 @@ func (m *MockPublisher) PublishEvent(_ context.Context, msg *EventMessage) error
 	return nil
 }
 
+// PublishEvents captures all messages for later inspection.
+func (m *MockPublisher) PublishEvents(_ context.Context, msgs []*EventMessage) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.failNext {
+		m.failNext = false
+		if m.failErr != nil {
+			return m.failErr
+		}
+		return fmt.Errorf("mock publish failure")
+	}
+
+	m.messages = append(m.messages, msgs...)
+	return nil
+}
+
 // Close is a no-op for the mock.
 func (m *MockPublisher) Close() error {
 	return nil

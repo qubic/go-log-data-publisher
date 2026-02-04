@@ -196,6 +196,44 @@ func (m *Manager) StoreEvent(event *eventsbridge.Event) error {
 	return nil
 }
 
+// StoreEvents stores a batch of events (assumed to be same epoch) and updates state
+func (m *Manager) StoreEvents(events []*eventsbridge.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	// All events in a batch are for the same epoch
+	epoch := events[0].Epoch
+
+	db, err := m.GetOrCreateEpochDB(epoch)
+	if err != nil {
+		return fmt.Errorf("failed to get epoch db: %w", err)
+	}
+
+	// Batch store all events
+	if err := db.StoreEvents(events); err != nil {
+		return fmt.Errorf("failed to store events: %w", err)
+	}
+
+	// Update state with last event's info
+	last := events[len(events)-1]
+	if err := m.state.UpdateState(epoch, int64(last.LogId), last.Tick); err != nil {
+		return fmt.Errorf("failed to update state: %w", err)
+	}
+
+	// Update epoch tick range
+	if err := m.state.UpdateEpochTickRange(epoch, last.Tick); err != nil {
+		m.logger.Warn("Failed to update epoch tick range", zap.Error(err))
+	}
+
+	// Increment event count by batch size
+	if err := m.state.IncrementEpochEventCountBy(epoch, uint64(len(events))); err != nil {
+		m.logger.Warn("Failed to increment event count", zap.Error(err))
+	}
+
+	return nil
+}
+
 // GetEventsForTick finds the appropriate epoch and returns events for a tick
 func (m *Manager) GetEventsForTick(tick uint32) (uint32, []*eventsbridge.Event, error) {
 	m.mu.RLock()

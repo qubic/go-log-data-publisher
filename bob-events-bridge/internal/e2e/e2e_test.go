@@ -257,6 +257,9 @@ func TestE2E_Deduplication(t *testing.T) {
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 
+	// Flush the batch so the first event is stored
+	mockBob.SendCatchUpComplete(0, 1, 1)
+
 	// Wait for first event
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
 		exists, _ := storageMgr.HasEvent(145, 22000001, 1)
@@ -1037,14 +1040,23 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 
+	// Send catchUpComplete to trigger batch flush (and thus Kafka failure)
+	mockBob.SendCatchUpComplete(0, 1, 1)
+
 	// Wait for the processor to reconnect (it will disconnect after Kafka failure)
 	// The mock server accepts new connections, so we wait for a second subscription
 	_, err = mockBob.WaitForSubscription(10 * time.Second)
 	require.NoError(t, err)
 
+	// Small delay to let the mock server's old writeLoop exit so messages
+	// are delivered in order on the new connection
+	time.Sleep(200 * time.Millisecond)
+
 	// Resend the event (bob resends on reconnect)
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
+	// Small delay to ensure event is delivered before catchUpComplete
+	time.Sleep(50 * time.Millisecond)
 	mockBob.SendCatchUpComplete(0, 1, 1)
 
 	// Now Kafka should succeed and event should be stored

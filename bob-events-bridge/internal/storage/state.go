@@ -183,6 +183,21 @@ func (s *StateStore) IncrementEpochEventCount(epoch uint32) error {
 	return s.db.Set([]byte(key), val, pebble.Sync)
 }
 
+// IncrementEpochEventCountBy increments the event count for an epoch by count
+func (s *StateStore) IncrementEpochEventCountBy(epoch uint32, count uint64) error {
+	key := fmt.Sprintf(keyEpochEventCount, epoch)
+
+	current, _, err := s.getUint64(key)
+	if err != nil {
+		return err
+	}
+
+	val := make([]byte, 8)
+	binary.LittleEndian.PutUint64(val, current+count)
+
+	return s.db.Set([]byte(key), val, pebble.Sync)
+}
+
 // GetEpochEventCount returns the event count for an epoch
 func (s *StateStore) GetEpochEventCount(epoch uint32) (uint64, error) {
 	key := fmt.Sprintf(keyEpochEventCount, epoch)

@@ -13,6 +13,7 @@ import (
 // Publisher is the interface for publishing events to Kafka.
 type Publisher interface {
 	PublishEvent(ctx context.Context, msg *EventMessage) error
+	PublishEvents(ctx context.Context, msgs []*EventMessage) error
 	Close() error
 }
 
@@ -60,6 +61,36 @@ func (p *Producer) PublishEvent(ctx context.Context, msg *EventMessage) error {
 		zap.Uint64("logId", msg.LogID),
 		zap.Uint32("tick", msg.TickNumber),
 		zap.Uint32("type", msg.Type))
+
+	return nil
+}
+
+// PublishEvents serializes multiple EventMessages and writes them to Kafka in a single batch call.
+func (p *Producer) PublishEvents(ctx context.Context, msgs []*EventMessage) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	kafkaMsgs := make([]kafkago.Message, 0, len(msgs))
+	for _, msg := range msgs {
+		value, err := json.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("failed to marshal event message: %w", err)
+		}
+		key := []byte(fmt.Sprintf("%d", msg.TickNumber))
+		kafkaMsgs = append(kafkaMsgs, kafkago.Message{
+			Key:   key,
+			Value: value,
+		})
+	}
+
+	if err := p.writer.WriteMessages(ctx, kafkaMsgs...); err != nil {
+		return fmt.Errorf("failed to write messages to kafka: %w", err)
+	}
+
+	p.logger.Debug("Published batch to Kafka",
+		zap.Int("count", len(msgs)),
+		zap.Uint32("tick", msgs[0].TickNumber))
 
 	return nil
 }

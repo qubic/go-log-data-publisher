@@ -16,6 +16,15 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// tickBatch accumulates events for a single tick before flushing
+type tickBatch struct {
+	tick        uint32
+	epoch       uint32
+	kafkaMsgs   []*kafka.EventMessage
+	protoEvents []*eventsbridge.Event
+	lastLogID   uint64
+}
+
 // Processor handles connecting to bob and processing events
 type Processor struct {
 	cfg           *config.Config
@@ -32,6 +41,8 @@ type Processor struct {
 	lastTick       uint32
 	eventsReceived uint64
 	tickEventIndex uint32
+
+	pendingBatch *tickBatch
 }
 
 // NewProcessor creates a new event processor
@@ -194,6 +205,9 @@ func (p *Processor) processMessages(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			if err := p.flushBatch(ctx); err != nil {
+				p.logger.Warn("Failed to flush batch on context cancellation", zap.Error(err))
+			}
 			return ctx.Err()
 		default:
 		}
@@ -201,11 +215,14 @@ func (p *Processor) processMessages(ctx context.Context) error {
 		msg, err := p.client.ReadMessage()
 		if err != nil {
 			p.client.SetConnected(false)
+			if flushErr := p.flushBatch(context.Background()); flushErr != nil {
+				p.logger.Warn("Failed to flush batch on disconnect", zap.Error(flushErr))
+			}
 			return fmt.Errorf("read error: %w", err)
 		}
 
 		if err := p.handleMessage(ctx, msg); err != nil {
-			p.logger.Error("Failed to handle message", zap.Error(err))
+			p.logger.Error("Failed to handle message", zap.Error(err), zap.ByteString("rawMessage", msg))
 			return fmt.Errorf("fatal message handling error: %w", err)
 		}
 	}
@@ -228,6 +245,10 @@ func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 		return p.handleLogMessage(ctx, data)
 
 	case bob.MessageTypeCatchUpComplete:
+		if err := p.flushBatch(ctx); err != nil {
+			return fmt.Errorf("failed to flush batch on catch-up complete: %w", err)
+		}
+
 		var msg bob.CatchUpCompleteMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return fmt.Errorf("failed to parse catchup message: %w", err)
@@ -268,6 +289,45 @@ func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 	return nil
 }
 
+// flushBatch publishes and stores the pending batch, then resets it.
+// On failure the batch is discarded — the processor will disconnect and
+// bob will resend from lastTick on reconnect (at-least-once).
+func (p *Processor) flushBatch(ctx context.Context) error {
+	if p.pendingBatch == nil || len(p.pendingBatch.protoEvents) == 0 {
+		p.pendingBatch = nil
+		return nil
+	}
+
+	batch := p.pendingBatch
+	p.pendingBatch = nil
+
+	// Publish to Kafka before storage (at-least-once delivery)
+	if p.publisher != nil && len(batch.kafkaMsgs) > 0 {
+		if err := p.publisher.PublishEvents(ctx, batch.kafkaMsgs); err != nil {
+			return fmt.Errorf("failed to publish batch to kafka: %w", err)
+		}
+	}
+
+	// Batch PebbleDB write
+	if err := p.storage.StoreEvents(batch.protoEvents); err != nil {
+		return fmt.Errorf("failed to store event batch: %w", err)
+	}
+
+	// Update local state
+	p.mu.Lock()
+	p.lastLogID = int64(batch.lastLogID)
+	p.lastTick = batch.tick
+	p.eventsReceived += uint64(len(batch.protoEvents))
+	p.mu.Unlock()
+
+	p.logger.Debug("Flushed batch",
+		zap.Uint32("tick", batch.tick),
+		zap.Uint32("epoch", batch.epoch),
+		zap.Int("events", len(batch.protoEvents)))
+
+	return nil
+}
+
 // handleLogMessage processes a log event
 func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 	var logMsg bob.LogMessage
@@ -286,16 +346,22 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	// Check for epoch transition
+	// Check for epoch transition — flush before changing epoch
 	if uint32(payload.Epoch) != p.currentEpoch {
+		if err := p.flushBatch(ctx); err != nil {
+			return fmt.Errorf("failed to flush batch on epoch transition: %w", err)
+		}
 		p.logger.Info("Epoch transition detected",
 			zap.Uint32("oldEpoch", p.currentEpoch),
 			zap.Uint16("newEpoch", payload.Epoch))
 		p.currentEpoch = uint32(payload.Epoch)
 	}
 
-	// Reset counter on tick change
-	if payload.Tick != p.lastTick && p.lastTick != 0 {
+	// Tick boundary — flush if tick changed
+	if p.pendingBatch != nil && payload.Tick != p.pendingBatch.tick {
+		if err := p.flushBatch(ctx); err != nil {
+			return fmt.Errorf("failed to flush batch on tick change: %w", err)
+		}
 		p.tickEventIndex = 0
 	}
 
@@ -331,14 +397,12 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 		}
 	}
 
-	// Publish to Kafka before storage (at-least-once delivery)
+	// Build kafka message (if publisher configured)
+	var kafkaMsg *kafka.EventMessage
 	if p.publisher != nil {
-		kafkaMsg, err := kafka.BuildEventMessage(&logMsg, &payload, parsed, p.tickEventIndex)
+		kafkaMsg, err = kafka.BuildEventMessage(&logMsg, &payload, parsed, p.tickEventIndex)
 		if err != nil {
 			return fmt.Errorf("failed to build kafka message: %w", err)
-		}
-		if err := p.publisher.PublishEvent(ctx, kafkaMsg); err != nil {
-			return fmt.Errorf("failed to publish to kafka: %w", err)
 		}
 	}
 
@@ -354,20 +418,24 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 		IndexInTick: p.tickEventIndex,
 	}
 
-	// Store the event
-	if err := p.storage.StoreEvent(event); err != nil {
-		return fmt.Errorf("failed to store event: %w", err)
+	// Initialize batch if nil
+	if p.pendingBatch == nil {
+		p.pendingBatch = &tickBatch{
+			tick:  payload.Tick,
+			epoch: uint32(payload.Epoch),
+		}
 	}
 
-	// Update local state
-	p.mu.Lock()
-	p.lastLogID = int64(payload.LogID)
-	p.lastTick = payload.Tick
-	p.eventsReceived++
-	p.tickEventIndex++
-	p.mu.Unlock()
+	// Add to batch
+	if kafkaMsg != nil {
+		p.pendingBatch.kafkaMsgs = append(p.pendingBatch.kafkaMsgs, kafkaMsg)
+	}
+	p.pendingBatch.protoEvents = append(p.pendingBatch.protoEvents, event)
+	p.pendingBatch.lastLogID = payload.LogID
 
-	p.logger.Debug("Stored event",
+	p.tickEventIndex++
+
+	p.logger.Debug("Buffered event",
 		zap.Uint64("logID", payload.LogID),
 		zap.Uint32("tick", payload.Tick),
 		zap.Uint16("epoch", payload.Epoch),
@@ -375,7 +443,8 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 		zap.Uint32("scIndex", logMsg.SCIndex),
 		zap.Uint32("logType", logMsg.LogType),
 		zap.Bool("isCatchUp", logMsg.IsCatchUp),
-		zap.Bool("kafkaPublished", p.publisher != nil))
+		zap.Bool("kafkaEnabled", p.publisher != nil),
+		zap.Int("batchSize", len(p.pendingBatch.protoEvents)))
 
 	return nil
 }
