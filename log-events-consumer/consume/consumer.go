@@ -53,14 +53,14 @@ func (c *Consumer) Consume(ctx context.Context) error {
 				return fmt.Errorf("consuming batch: %w", err)
 			}
 			log.Printf("Processed [%d] records. Tick: [%d]", count, c.currentTick)
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
 
 func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 	defer c.kafkaClient.AllowRebalance()
-	fetches := c.kafkaClient.PollRecords(ctx, 1000)
+	fetches := c.kafkaClient.PollRecords(ctx, 10000)
 	if errors := fetches.Errors(); len(errors) > 0 {
 		for _, err := range errors {
 			log.Printf("Fetches error: %v", err)
