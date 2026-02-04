@@ -91,6 +91,7 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	require.Equal(t, uint64(1), resp.Events[0].LogId)
 	require.Equal(t, uint32(22000001), resp.Events[0].Tick)
 	require.Equal(t, uint32(145), resp.Events[0].Epoch)
+	require.Equal(t, uint32(0), resp.Events[0].IndexInTick)
 }
 
 // TestE2E_MultipleEventsPerTick tests multiple events for the same tick
@@ -142,13 +143,18 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Events, 5)
 
-	// Verify all log IDs are present
+	// Verify all log IDs are present and IndexInTick values are 0-4
 	logIDs := make(map[uint64]bool)
+	indexValues := make(map[uint32]bool)
 	for _, event := range resp.Events {
 		logIDs[event.LogId] = true
+		indexValues[event.IndexInTick] = true
 	}
 	for i := uint64(1); i <= 5; i++ {
 		require.True(t, logIDs[i], "Missing event with logID %d", i)
+	}
+	for i := uint32(0); i < 5; i++ {
+		require.True(t, indexValues[i], "Missing IndexInTick value %d", i)
 	}
 }
 
@@ -614,4 +620,193 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 	require.True(t, eventTypes[0], "qu_transfer event should be stored")
 	require.True(t, eventTypes[1], "asset_issuance event should be stored")
 	require.True(t, eventTypes[2], "asset_ownership_change event should be stored")
+}
+
+// TestE2E_IndexInTickResetsAcrossTicks tests that IndexInTick resets when tick changes
+func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Send 2 events for tick A
+	tickA := uint32(22000001)
+	for i := uint64(1); i <= 2; i++ {
+		payload := CreateLogPayload(145, tickA, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
+		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	// Send 3 events for tick B
+	tickB := uint32(22000002)
+	for i := uint64(3); i <= 5; i++ {
+		payload := CreateLogPayload(145, tickB, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
+		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	mockBob.SendCatchUpComplete(0, 5, 5)
+
+	// Wait for all events
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		_, eventsA, _ := storageMgr.GetEventsForTick(tickA)
+		_, eventsB, _ := storageMgr.GetEventsForTick(tickB)
+		return len(eventsA) >= 2 && len(eventsB) >= 3
+	}, "all events should be stored")
+
+	// Verify tick A indices are 0,1
+	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
+	respA, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tickA})
+	require.NoError(t, err)
+	require.Len(t, respA.Events, 2)
+	indicesA := make(map[uint32]bool)
+	for _, event := range respA.Events {
+		indicesA[event.IndexInTick] = true
+	}
+	require.True(t, indicesA[0], "Expected IndexInTick 0 for tick A")
+	require.True(t, indicesA[1], "Expected IndexInTick 1 for tick A")
+
+	// Verify tick B indices are 0,1,2 (reset from tick A)
+	respB, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tickB})
+	require.NoError(t, err)
+	require.Len(t, respB.Events, 3)
+	indicesB := make(map[uint32]bool)
+	for _, event := range respB.Events {
+		indicesB[event.IndexInTick] = true
+	}
+	require.True(t, indicesB[0], "Expected IndexInTick 0 for tick B")
+	require.True(t, indicesB[1], "Expected IndexInTick 1 for tick B")
+	require.True(t, indicesB[2], "Expected IndexInTick 2 for tick B")
+}
+
+// TestE2E_CrashRecoveryIndexInTick tests that IndexInTick is correctly recovered after crash
+func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
+	tempDir := t.TempDir()
+	tick := uint32(22000050)
+
+	// Phase 1: Process 2 events and stop
+	func() {
+		mockBob := NewMockBobServer(145, 22000000)
+		defer mockBob.Close()
+
+		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		require.NoError(t, err)
+
+		cfg := CreateTestConfig(mockBob.URL(), tempDir)
+		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := startProcessor(ctx, proc)
+
+		_, err = mockBob.WaitForSubscription(5 * time.Second)
+		require.NoError(t, err)
+
+		// Send 2 events
+		for i := uint64(1); i <= 2; i++ {
+			payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+				"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+				"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+				"amount": i,
+			})
+			err = mockBob.SendLogMessage(payload, 0, 0, false)
+			require.NoError(t, err)
+		}
+		mockBob.SendCatchUpComplete(0, 2, 2)
+
+		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+			_, events, _ := storageMgr.GetEventsForTick(tick)
+			return len(events) >= 2
+		}, "2 events should be stored")
+
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	// Phase 2: Restart, send 2 duplicates + 1 new event, verify new event gets index 2
+	mockBob2 := NewMockBobServer(145, 22000000)
+	defer mockBob2.Close()
+
+	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	cfg2 := CreateTestConfig(mockBob2.URL(), tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc2)
+
+	defer func() {
+		stopProcessor(cancel, proc2, done)
+		_ = storageMgr2.Close()
+	}()
+
+	_, err = mockBob2.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Resend the 2 duplicate events (should be deduplicated)
+	for i := uint64(1); i <= 2; i++ {
+		payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
+		err = mockBob2.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	// Send 1 new event for the same tick
+	newPayload := CreateLogPayload(145, tick, 3, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 3,
+	})
+	err = mockBob2.SendLogMessage(newPayload, 0, 0, false)
+	require.NoError(t, err)
+	mockBob2.SendCatchUpComplete(0, 3, 3)
+
+	// Wait for the new event
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		_, events, _ := storageMgr2.GetEventsForTick(tick)
+		return len(events) >= 3
+	}, "3 events should be stored after recovery")
+
+	// Verify the new event has IndexInTick=2
+	service := grpc.NewEventsBridgeService(storageMgr2, zap.NewNop())
+	resp, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tick})
+	require.NoError(t, err)
+	require.Len(t, resp.Events, 3)
+
+	// Find the event with logID=3 (the new one) and check its index
+	for _, event := range resp.Events {
+		if event.LogId == 3 {
+			require.Equal(t, uint32(2), event.IndexInTick, "New event after crash recovery should have IndexInTick=2")
+		}
+	}
 }

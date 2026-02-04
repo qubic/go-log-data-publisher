@@ -87,6 +87,27 @@ func (e *EpochDB) StoreEvent(event *eventsbridge.Event) error {
 	return nil
 }
 
+// CountEventsForTick counts the number of events stored for a given tick using prefix scan
+func (e *EpochDB) CountEventsForTick(tick uint32) (uint32, error) {
+	prefix := []byte(fmt.Sprintf("%010d:", tick))
+
+	iter, err := e.db.NewIter(&pebble.IterOptions{
+		LowerBound: prefix,
+		UpperBound: []byte(fmt.Sprintf("%010d;", tick)), // ';' is after ':' in ASCII
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to create iterator: %w", err)
+	}
+	defer iter.Close()
+
+	var count uint32
+	for iter.First(); iter.Valid(); iter.Next() {
+		count++
+	}
+
+	return count, nil
+}
+
 // GetEventsForTick retrieves all events for a given tick using prefix scan
 func (e *EpochDB) GetEventsForTick(tick uint32) ([]*eventsbridge.Event, error) {
 	prefix := []byte(fmt.Sprintf("%010d:", tick))

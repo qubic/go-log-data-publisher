@@ -354,6 +354,42 @@ func TestMultipleEventsPerTick(t *testing.T) {
 	}
 }
 
+func TestCountEventsForTick(t *testing.T) {
+	tempDir := t.TempDir()
+	manager := createTestManager(t, tempDir)
+	defer manager.Close()
+
+	// Store 3 events for tick 100 in epoch 1
+	for i := uint64(1); i <= 3; i++ {
+		err := manager.StoreEvent(createTestEvent(1, 100, i))
+		require.NoError(t, err)
+	}
+
+	// Store 1 event for tick 101 in epoch 1
+	err := manager.StoreEvent(createTestEvent(1, 101, 10))
+	require.NoError(t, err)
+
+	// Count events for tick 100 — expect 3
+	count, err := manager.CountEventsForTick(1, 100)
+	require.NoError(t, err)
+	require.Equal(t, uint32(3), count)
+
+	// Count events for tick 101 — expect 1
+	count, err = manager.CountEventsForTick(1, 101)
+	require.NoError(t, err)
+	require.Equal(t, uint32(1), count)
+
+	// Count events for nonexistent tick — expect 0
+	count, err = manager.CountEventsForTick(1, 999)
+	require.NoError(t, err)
+	require.Equal(t, uint32(0), count)
+
+	// Count events for nonexistent epoch — expect 0
+	count, err = manager.CountEventsForTick(99, 100)
+	require.NoError(t, err)
+	require.Equal(t, uint32(0), count)
+}
+
 func TestBasePath(t *testing.T) {
 	// Create temp directory
 	tempDir := t.TempDir()

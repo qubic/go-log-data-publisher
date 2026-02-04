@@ -148,6 +148,15 @@ func (m *Manager) GetEpochDB(epoch uint32) *EpochDB {
 	return m.epochDBs[epoch]
 }
 
+// CountEventsForTick counts the number of events stored for a given tick in the specified epoch
+func (m *Manager) CountEventsForTick(epoch uint32, tick uint32) (uint32, error) {
+	db := m.GetEpochDB(epoch)
+	if db == nil {
+		return 0, nil
+	}
+	return db.CountEventsForTick(tick)
+}
+
 // HasEvent checks if an event exists in the specified epoch
 func (m *Manager) HasEvent(epoch uint32, tick uint32, logID uint64) (bool, error) {
 	db := m.GetEpochDB(epoch)

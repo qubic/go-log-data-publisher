@@ -29,6 +29,7 @@ type Processor struct {
 	lastLogID      int64
 	lastTick       uint32
 	eventsReceived uint64
+	tickEventIndex uint32
 }
 
 // NewProcessor creates a new event processor
@@ -57,6 +58,20 @@ func (p *Processor) Start(ctx context.Context) error {
 			zap.Uint32("epoch", p.currentEpoch),
 			zap.Int64("lastLogID", p.lastLogID),
 			zap.Uint32("lastTick", p.lastTick))
+
+		if state.LastTick > 0 {
+			count, err := p.storage.CountEventsForTick(state.CurrentEpoch, state.LastTick)
+			if err != nil {
+				p.logger.Warn("Failed to count events for tick, starting index at 0",
+					zap.Uint32("tick", state.LastTick),
+					zap.Error(err))
+			} else {
+				p.tickEventIndex = count
+				p.logger.Info("Recovered tick event index",
+					zap.Uint32("tick", state.LastTick),
+					zap.Uint32("tickEventIndex", p.tickEventIndex))
+			}
+		}
 	} else {
 		p.logger.Info("Starting fresh, no previous state found")
 	}
@@ -276,6 +291,11 @@ func (p *Processor) handleLogMessage(data []byte) error {
 		p.currentEpoch = uint32(payload.Epoch)
 	}
 
+	// Reset counter on tick change
+	if payload.Tick != p.lastTick && p.lastTick != 0 {
+		p.tickEventIndex = 0
+	}
+
 	// Deduplication check: skip if we already have this event
 	exists, err := p.storage.HasEvent(p.currentEpoch, payload.Tick, payload.LogID)
 	if err != nil {
@@ -310,13 +330,14 @@ func (p *Processor) handleLogMessage(data []byte) error {
 
 	// Create event proto
 	event := &eventsbridge.Event{
-		LogId:     payload.LogID,
-		Tick:      payload.Tick,
-		Epoch:     uint32(payload.Epoch),
-		EventType: payload.Type,
-		TxHash:    payload.TxHash,
-		Timestamp: payload.Timestamp,
-		Body:      bodyStruct,
+		LogId:       payload.LogID,
+		Tick:        payload.Tick,
+		Epoch:       uint32(payload.Epoch),
+		EventType:   payload.Type,
+		TxHash:      payload.TxHash,
+		Timestamp:   payload.Timestamp,
+		Body:        bodyStruct,
+		IndexInTick: p.tickEventIndex,
 	}
 
 	// Store the event
@@ -329,6 +350,7 @@ func (p *Processor) handleLogMessage(data []byte) error {
 	p.lastLogID = int64(payload.LogID)
 	p.lastTick = payload.Tick
 	p.eventsReceived++
+	p.tickEventIndex++
 	p.mu.Unlock()
 
 	p.logger.Debug("Stored event",
