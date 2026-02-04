@@ -25,11 +25,12 @@ type Producer struct {
 // NewProducer creates a new Kafka producer.
 func NewProducer(brokers []string, topic string, logger *zap.Logger) *Producer {
 	w := &kafkago.Writer{
-		Addr:         kafkago.TCP(brokers...),
-		Topic:        topic,
-		Balancer:     &kafkago.Hash{},
-		RequiredAcks: kafkago.RequireAll,
-		Compression:  compress.Lz4,
+		Addr:                   kafkago.TCP(brokers...),
+		Topic:                  topic,
+		Balancer:               &kafkago.Hash{},
+		RequiredAcks:           kafkago.RequireAll,
+		Compression:            compress.Lz4,
+		AllowAutoTopicCreation: true,
 	}
 
 	return &Producer{
