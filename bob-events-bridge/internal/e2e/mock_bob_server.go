@@ -153,9 +153,17 @@ func (m *MockBobServer) writeLoop(conn *websocket.Conn) {
 	for msg := range m.messagesToSend {
 		m.mu.Lock()
 		closed := m.closed
+		currentConn := m.conn
 		m.mu.Unlock()
 
 		if closed {
+			return
+		}
+
+		// If this writeLoop's connection is no longer the active one,
+		// re-queue the message for the new connection's writeLoop and exit.
+		if currentConn != conn {
+			m.messagesToSend <- msg
 			return
 		}
 

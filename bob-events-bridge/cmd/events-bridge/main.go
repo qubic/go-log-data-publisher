@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/qubic/bob-events-bridge/internal/config"
 	"github.com/qubic/bob-events-bridge/internal/grpc"
+	"github.com/qubic/bob-events-bridge/internal/kafka"
 	"github.com/qubic/bob-events-bridge/internal/processor"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 	"go.uber.org/zap"
@@ -73,8 +75,19 @@ func main() {
 
 	logger.Info("gRPC and HTTP servers started")
 
+	// Initialize Kafka publisher if enabled
+	var kafkaPublisher kafka.Publisher
+	if cfg.Kafka.Enabled {
+		brokers := strings.Split(cfg.Kafka.Brokers, ",")
+		kafkaPublisher = kafka.NewProducer(brokers, cfg.Kafka.Topic, logger)
+		defer kafkaPublisher.Close()
+		logger.Info("Kafka publisher enabled",
+			zap.Strings("brokers", brokers),
+			zap.String("topic", cfg.Kafka.Topic))
+	}
+
 	// Create processor
-	proc := processor.NewProcessor(cfg, subscriptions, storageMgr, logger)
+	proc := processor.NewProcessor(cfg, subscriptions, storageMgr, logger, kafkaPublisher)
 
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())

@@ -10,6 +10,7 @@ import (
 	eventsbridge "github.com/qubic/bob-events-bridge/api/events-bridge/v1"
 	"github.com/qubic/bob-events-bridge/internal/bob"
 	"github.com/qubic/bob-events-bridge/internal/config"
+	"github.com/qubic/bob-events-bridge/internal/kafka"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -22,6 +23,7 @@ type Processor struct {
 	storage       *storage.Manager
 	logger        *zap.Logger
 	client        *bob.WSClient
+	publisher     kafka.Publisher // nil if Kafka disabled
 
 	mu             sync.RWMutex
 	running        bool
@@ -33,12 +35,13 @@ type Processor struct {
 }
 
 // NewProcessor creates a new event processor
-func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger) *Processor {
+func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher) *Processor {
 	return &Processor{
 		cfg:           cfg,
 		subscriptions: subscriptions,
 		storage:       storage,
 		logger:        logger,
+		publisher:     publisher,
 	}
 }
 
@@ -201,7 +204,7 @@ func (p *Processor) processMessages(ctx context.Context) error {
 			return fmt.Errorf("read error: %w", err)
 		}
 
-		if err := p.handleMessage(msg); err != nil {
+		if err := p.handleMessage(ctx, msg); err != nil {
 			p.logger.Error("Failed to handle message", zap.Error(err))
 			return fmt.Errorf("fatal message handling error: %w", err)
 		}
@@ -209,7 +212,7 @@ func (p *Processor) processMessages(ctx context.Context) error {
 }
 
 // handleMessage processes a single message from bob
-func (p *Processor) handleMessage(data []byte) error {
+func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 	var base bob.BaseMessage
 	if err := json.Unmarshal(data, &base); err != nil {
 		return fmt.Errorf("failed to parse base message: %w", err)
@@ -222,7 +225,7 @@ func (p *Processor) handleMessage(data []byte) error {
 
 	switch base.Type {
 	case bob.MessageTypeLog:
-		return p.handleLogMessage(data)
+		return p.handleLogMessage(ctx, data)
 
 	case bob.MessageTypeCatchUpComplete:
 		var msg bob.CatchUpCompleteMessage
@@ -266,7 +269,7 @@ func (p *Processor) handleMessage(data []byte) error {
 }
 
 // handleLogMessage processes a log event
-func (p *Processor) handleLogMessage(data []byte) error {
+func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 	var logMsg bob.LogMessage
 	if err := json.Unmarshal(data, &logMsg); err != nil {
 		return fmt.Errorf("failed to parse log message: %w", err)
@@ -328,6 +331,17 @@ func (p *Processor) handleLogMessage(data []byte) error {
 		}
 	}
 
+	// Publish to Kafka before storage (at-least-once delivery)
+	if p.publisher != nil {
+		kafkaMsg, err := kafka.BuildEventMessage(&logMsg, &payload, parsed, p.tickEventIndex)
+		if err != nil {
+			return fmt.Errorf("failed to build kafka message: %w", err)
+		}
+		if err := p.publisher.PublishEvent(ctx, kafkaMsg); err != nil {
+			return fmt.Errorf("failed to publish to kafka: %w", err)
+		}
+	}
+
 	// Create event proto
 	event := &eventsbridge.Event{
 		LogId:       payload.LogID,
@@ -360,7 +374,8 @@ func (p *Processor) handleLogMessage(data []byte) error {
 		zap.Uint32("type", payload.Type),
 		zap.Uint32("scIndex", logMsg.SCIndex),
 		zap.Uint32("logType", logMsg.LogType),
-		zap.Bool("isCatchUp", logMsg.IsCatchUp))
+		zap.Bool("isCatchUp", logMsg.IsCatchUp),
+		zap.Bool("kafkaPublished", p.publisher != nil))
 
 	return nil
 }

@@ -22,6 +22,7 @@ type Config struct {
 	Bob     BobConfig
 	Storage StorageConfig
 	Server  ServerConfig
+	Kafka   KafkaConfig
 	Debug   bool `conf:"default:false,help:enable debug logging"`
 }
 
@@ -41,6 +42,13 @@ type StorageConfig struct {
 type ServerConfig struct {
 	GRPCAddr string `conf:"default:0.0.0.0:8001,help:gRPC server address"`
 	HTTPAddr string `conf:"default:0.0.0.0:8000,help:HTTP server address"`
+}
+
+// KafkaConfig holds the Kafka publisher configuration
+type KafkaConfig struct {
+	Brokers string `conf:"default:localhost:9092,help:comma-separated Kafka broker addresses"`
+	Topic   string `conf:"default:qubic-events,help:Kafka topic name"`
+	Enabled bool   `conf:"default:false,help:enable Kafka publishing"`
 }
 
 // SubscriptionEntry represents a single subscription
