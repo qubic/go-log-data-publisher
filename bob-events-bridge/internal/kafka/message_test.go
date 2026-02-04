@@ -127,6 +127,13 @@ func TestTransformEventBody_UnsupportedType(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported event body type")
 }
 
+func TestParseBobTimestamp_TwoDigitYear(t *testing.T) {
+	ts, err := ParseBobTimestamp("26-01-28 21:37:48")
+	require.NoError(t, err)
+	// 2026-01-28 21:37:48 UTC = 1769636268
+	assert.Equal(t, int64(1769636268), ts)
+}
+
 func TestParseBobTimestamp_Valid(t *testing.T) {
 	ts, err := ParseBobTimestamp("2024-06-15 14:30:00")
 	require.NoError(t, err)

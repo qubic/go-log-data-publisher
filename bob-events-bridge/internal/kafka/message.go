@@ -22,15 +22,24 @@ type EventMessage struct {
 	Body                  map[string]any `json:"body"`
 }
 
-// ParseBobTimestamp parses a bob timestamp string ("2006-01-02 15:04:05") into Unix seconds.
+// ParseBobTimestamp parses a bob timestamp string into Unix seconds.
+// Bob sends 2-digit year format ("26-01-28 21:37:48"), with fallbacks for
+// 4-digit year ("2006-01-02 15:04:05") and RFC3339.
 func ParseBobTimestamp(ts string) (int64, error) {
-	t, err := time.Parse("2006-01-02 15:04:05", ts)
+	// Bob sends 2-digit year: "26-01-28 21:37:48"
+	t, err := time.Parse("06-01-02 15:04:05", ts)
+	if err == nil {
+		return t.Unix(), nil
+	}
+	// 4-digit year fallback: "2024-06-15 14:30:00"
+	t, err = time.Parse("2006-01-02 15:04:05", ts)
+	if err == nil {
+		return t.Unix(), nil
+	}
+	// RFC3339 fallback (used in tests)
+	t, err = time.Parse(time.RFC3339, ts)
 	if err != nil {
-		// Also try RFC3339 as a fallback (used in tests)
-		t, err = time.Parse(time.RFC3339, ts)
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse timestamp %q: %w", ts, err)
-		}
+		return 0, fmt.Errorf("failed to parse timestamp %q: %w", ts, err)
 	}
 	return t.Unix(), nil
 }
