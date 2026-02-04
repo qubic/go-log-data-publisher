@@ -29,7 +29,7 @@ type Config struct {
 type BobConfig struct {
 	WebSocketURL string `conf:"default:ws://localhost:40420/ws/logs,help:bob WebSocket URL"`
 	StatusURL    string `conf:"default:http://localhost:40420/status,help:bob status endpoint URL"`
-	LogTypes     string `conf:"default:0 1 2 3,help:space-separated log types to subscribe to"`
+	LogTypes     string `conf:"default:0 1 2 3 8 13,help:space-separated log types to subscribe to"`
 }
 
 // StorageConfig holds the storage configuration

@@ -67,7 +67,11 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	require.NoError(t, err, "Timeout waiting for subscription")
 
 	// 6. Send event
-	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{"amount": 1000})
+	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 1000,
+	})
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err, "Failed to send log message")
 
@@ -116,7 +120,11 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	// Send 5 events for the same tick
 	tick := uint32(22000001)
 	for i := uint64(1); i <= 5; i++ {
-		payload := CreateLogPayload(145, tick, i, 0, map[string]any{"index": i})
+		payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
 		err = mockBob.SendLogMessage(payload, 0, 0, false)
 		require.NoError(t, err)
 	}
@@ -232,7 +240,11 @@ func TestE2E_Deduplication(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send the same event twice
-	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{"test": "data"})
+	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 500,
+	})
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 
@@ -448,21 +460,14 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send event with complex body
-	complexBody := map[string]any{
-		"sourceId":     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"destId":       "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-		"amount":       1000000,
-		"inputType":    0,
-		"inputSize":    32,
-		"extraData":    "test string",
-		"nestedObject": map[string]any{"key1": "value1", "key2": 123},
-		"arrayField":   []any{"a", "b", "c"},
-		"boolField":    true,
-		"floatField":   3.14159,
+	// Send event with a valid qu_transfer body
+	transferBody := map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 1000000,
 	}
 
-	payload := CreateLogPayload(145, 22000001, 1, 0, complexBody)
+	payload := CreateLogPayload(145, 22000001, 1, 0, transferBody)
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 	mockBob.SendCatchUpComplete(0, 1, 1)
@@ -483,11 +488,9 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	require.NotNil(t, event.GetBody())
 
 	bodyFields := event.GetBody().GetFields()
-	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", bodyFields["sourceId"].GetStringValue())
+	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", bodyFields["from"].GetStringValue())
+	require.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", bodyFields["to"].GetStringValue())
 	require.Equal(t, float64(1000000), bodyFields["amount"].GetNumberValue())
-	require.Equal(t, true, bodyFields["boolField"].GetBoolValue())
-	require.NotNil(t, bodyFields["nestedObject"].GetStructValue())
-	require.Len(t, bodyFields["arrayField"].GetListValue().GetValues(), 3)
 }
 
 // TestE2E_NonOKLogsSkipped tests that logs with ok=false are not stored

@@ -188,6 +188,7 @@ func (p *Processor) processMessages(ctx context.Context) error {
 
 		if err := p.handleMessage(msg); err != nil {
 			p.logger.Error("Failed to handle message", zap.Error(err))
+			return fmt.Errorf("fatal message handling error: %w", err)
 		}
 	}
 }
@@ -288,20 +289,22 @@ func (p *Processor) handleLogMessage(data []byte) error {
 		return nil
 	}
 
-	// Convert body JSON to protobuf Struct
+	// Validate and parse body into typed struct
+	parsed, err := bob.ParseEventBody(payload.Type, payload.Body)
+	if err != nil {
+		return fmt.Errorf("failed to parse event body for log type %d: %w", payload.Type, err)
+	}
+
+	// Convert typed struct to protobuf Struct
 	var bodyStruct *structpb.Struct
-	if len(payload.Body) > 0 {
-		var bodyMap map[string]interface{}
-		if err := json.Unmarshal(payload.Body, &bodyMap); err != nil {
-			p.logger.Warn("Failed to parse body as JSON object, skipping body",
-				zap.Error(err),
-				zap.ByteString("body", payload.Body))
-		} else {
-			bodyStruct, err = structpb.NewStruct(bodyMap)
-			if err != nil {
-				p.logger.Warn("Failed to convert body to protobuf Struct",
-					zap.Error(err))
-			}
+	if parsed != nil {
+		bodyMap, err := bob.EventBodyToMap(parsed)
+		if err != nil {
+			return fmt.Errorf("failed to convert event body to map: %w", err)
+		}
+		bodyStruct, err = structpb.NewStruct(bodyMap)
+		if err != nil {
+			return fmt.Errorf("failed to convert body to protobuf Struct: %w", err)
 		}
 	}
 
