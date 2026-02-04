@@ -4,6 +4,9 @@
 build:
 	go build -o bin/events-bridge ./cmd/events-bridge
 
+build-amd64:
+	GOOS=linux GOARCH=amd64 go build -o bin/events-bridge-amd64 ./cmd/events-bridge
+
 # Run the service
 run: build
 	./bin/events-bridge
