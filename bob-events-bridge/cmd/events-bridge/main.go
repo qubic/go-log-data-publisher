@@ -47,6 +47,11 @@ func main() {
 		zap.String("grpcAddr", cfg.Server.GRPCAddr),
 		zap.String("httpAddr", cfg.Server.HTTPAddr))
 
+	if cfg.Bob.OverrideStartTick {
+		logger.Info("Start tick override enabled",
+			zap.Uint32("startTick", cfg.Bob.StartTick))
+	}
+
 	// Parse subscriptions
 	subscriptions, err := cfg.GetSubscriptions()
 	if err != nil {

@@ -90,6 +90,14 @@ func (p *Processor) Start(ctx context.Context) error {
 		p.logger.Info("Starting fresh, no previous state found")
 	}
 
+	if p.cfg.Bob.OverrideStartTick {
+		p.lastTick = p.cfg.Bob.StartTick
+		p.lastLogID = 0
+		p.tickEventIndex = 0
+		p.logger.Info("Overriding start tick from config",
+			zap.Uint32("startTick", p.lastTick))
+	}
+
 	p.mu.Lock()
 	p.running = true
 	p.mu.Unlock()
