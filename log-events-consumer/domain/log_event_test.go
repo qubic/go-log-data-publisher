@@ -5,132 +5,612 @@ import (
 	"testing"
 )
 
-func TestLogEvent_JSONMarshaling(t *testing.T) {
+func TestLogEventToElastic_AllFields(t *testing.T) {
 	logEvent := LogEvent{
-		Ok:        true,
-		Epoch:     100,
-		Tick:      1000,
-		Id:        12345,
-		Hash:      "test-hash",
-		Type:      1,
-		TypeName:  "TestEvent",
-		Timestamp: "2024-01-01T00:00:00Z",
-		TxHash:    "tx-hash",
-		BodySize:  100,
-		Body:      "test-body",
+		Epoch:                 100,
+		TickNumber:            200,
+		Index:                 300,
+		Type:                  1,
+		EmittingContractIndex: 5,
+		LogId:                 400,
+		LogDigest:             "abcd1234",
+		TransactionHash:       "hash123",
+		Timestamp:             1234567890,
+		BodySize:              50,
+		Body: map[string]any{
+			"source":                 "SOURCEADDRESS",
+			"destination":            "DESTADDRESS",
+			"amount":                 int64(1000),
+			"assetName":              "TESTASSET",
+			"assetIssuer":            "ISSUERADDRESS",
+			"numberOfShares":         int64(500),
+			"managingContractIndex":  int64(10),
+			"unitOfMeasurement":      "1234567",
+			"numberOfDecimalPlaces":  float64(8),
+			"deductedAmount":         uint64(100),
+			"remainingAmount":        int64(900),
+			"contractIndex":          uint32(15),
+			"contractIndexBurnedFor": uint32(20),
+		},
 	}
 
-	jsonData, err := json.Marshal(logEvent)
+	result, err := LogEventToElastic(logEvent)
 	if err != nil {
-		t.Fatalf("Failed to marshal LogEvent: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var unmarshaled LogEvent
-	err = json.Unmarshal(jsonData, &unmarshaled)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal LogEvent: %v", err)
+	// Verify all base fields
+	if result.Epoch != 100 {
+		t.Errorf("expected Epoch=100, got %d", result.Epoch)
+	}
+	if result.TickNumber != 200 {
+		t.Errorf("expected TickNumber=200, got %d", result.TickNumber)
+	}
+	if result.Timestamp != 1234567890 {
+		t.Errorf("expected Timestamp=1234567890, got %d", result.Timestamp)
+	}
+	if result.EmittingContractIndex != 5 {
+		t.Errorf("expected EmittingContractIndex=5, got %d", result.EmittingContractIndex)
+	}
+	if result.TransactionHash != "hash123" {
+		t.Errorf("expected TransactionHash=hash123, got %s", result.TransactionHash)
+	}
+	if result.LogId != 400 {
+		t.Errorf("expected LogId=400, got %d", result.LogId)
+	}
+	if result.LogDigest != "abcd1234" {
+		t.Errorf("expected LogDigest=abcd1234, got %s", result.LogDigest)
+	}
+	if result.Type != 1 {
+		t.Errorf("expected Type=1, got %d", result.Type)
 	}
 
-	if unmarshaled.Ok != logEvent.Ok {
-		t.Errorf("Expected Ok %v, got %v", logEvent.Ok, unmarshaled.Ok)
+	// Verify all body fields
+	if result.Source != "SOURCEADDRESS" {
+		t.Errorf("expected Source=SOURCEADDRESS, got %s", result.Source)
 	}
-	if unmarshaled.Epoch != logEvent.Epoch {
-		t.Errorf("Expected Epoch %d, got %d", logEvent.Epoch, unmarshaled.Epoch)
+	if result.Destination != "DESTADDRESS" {
+		t.Errorf("expected Destination=DESTADDRESS, got %s", result.Destination)
 	}
-	if unmarshaled.Tick != logEvent.Tick {
-		t.Errorf("Expected Tick %d, got %d", logEvent.Tick, unmarshaled.Tick)
+	if result.Amount != 1000 {
+		t.Errorf("expected Amount=1000, got %d", result.Amount)
 	}
-	if unmarshaled.Id != logEvent.Id {
-		t.Errorf("Expected Id %d, got %d", logEvent.Id, unmarshaled.Id)
+	if result.AssetName != "TESTASSET" {
+		t.Errorf("expected AssetName=TESTASSET, got %s", result.AssetName)
 	}
-	if unmarshaled.Hash != logEvent.Hash {
-		t.Errorf("Expected Hash %s, got %s", logEvent.Hash, unmarshaled.Hash)
+	if result.AssetIssuer != "ISSUERADDRESS" {
+		t.Errorf("expected AssetIssuer=ISSUERADDRESS, got %s", result.AssetIssuer)
 	}
-	if unmarshaled.Type != logEvent.Type {
-		t.Errorf("Expected Type %d, got %d", logEvent.Type, unmarshaled.Type)
+	if result.NumberOfShares != 500 {
+		t.Errorf("expected NumberOfShares=500, got %d", result.NumberOfShares)
 	}
-	if unmarshaled.TypeName != logEvent.TypeName {
-		t.Errorf("Expected TypeName %s, got %s", logEvent.TypeName, unmarshaled.TypeName)
+	if result.ManagingContractIndex != 10 {
+		t.Errorf("expected ManagingContractIndex=10, got %d", result.ManagingContractIndex)
 	}
-	if unmarshaled.Timestamp != logEvent.Timestamp {
-		t.Errorf("Expected Timestamp %s, got %s", logEvent.Timestamp, unmarshaled.Timestamp)
+
+	expectedBytes := []byte{1, 2, 3, 4, 5, 6, 7}
+	if len(result.UnitOfMeasurement) != 7 {
+		t.Fatalf("expected UnitOfMeasurement length=7, got %d", len(result.UnitOfMeasurement))
 	}
-	if unmarshaled.TxHash != logEvent.TxHash {
-		t.Errorf("Expected TxHash %s, got %s", logEvent.TxHash, unmarshaled.TxHash)
+	for i := 0; i < 7; i++ {
+		if result.UnitOfMeasurement[i] != expectedBytes[i] {
+			t.Errorf("expected UnitOfMeasurement[%d]=%d, got %d", i, expectedBytes[i], result.UnitOfMeasurement[i])
+		}
 	}
-	if unmarshaled.BodySize != logEvent.BodySize {
-		t.Errorf("Expected BodySize %d, got %d", logEvent.BodySize, unmarshaled.BodySize)
+
+	if result.NumberOfDecimalPlaces != 8 {
+		t.Errorf("expected NumberOfDecimalPlaces=8, got %d", result.NumberOfDecimalPlaces)
 	}
-	if unmarshaled.Body != logEvent.Body {
-		t.Errorf("Expected Body %s, got %s", logEvent.Body, unmarshaled.Body)
+	if result.DeductedAmount != 100 {
+		t.Errorf("expected DeductedAmount=100, got %d", result.DeductedAmount)
+	}
+	if result.RemainingAmount != 900 {
+		t.Errorf("expected RemainingAmount=900, got %d", result.RemainingAmount)
+	}
+	if result.ContractIndex != 15 {
+		t.Errorf("expected ContractIndex=15, got %d", result.ContractIndex)
+	}
+	if result.ContractIndexBurnedFor != 20 {
+		t.Errorf("expected ContractIndexBurnedFor=20, got %d", result.ContractIndexBurnedFor)
 	}
 }
 
-func TestLogEvent_JSONUnmarshalPartialData(t *testing.T) {
-	jsonData := []byte(`{
-		"ok": true,
-		"epoch": 100,
-		"tick": 1000,
-		"id": 12345
-	}`)
-
-	var logEvent LogEvent
-	err := json.Unmarshal(jsonData, &logEvent)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal partial LogEvent: %v", err)
+func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           map[string]any
+		expectedJSON   map[string]any
+		unexpectedKeys []string
+	}{
+		{
+			name: "only source and destination",
+			body: map[string]any{
+				"source":      "SOURCEADDR",
+				"destination": "DESTADDR",
+			},
+			expectedJSON: map[string]any{
+				"epoch":                 float64(100),
+				"tickNumber":            float64(200),
+				"timestamp":             float64(1234567890),
+				"emittingContractIndex": float64(5),
+				"transactionHash":       "hash123",
+				"logId":                 float64(400),
+				"logDigest":             "abcd1234",
+				"type":                  float64(1),
+				"source":                "SOURCEADDR",
+				"destination":           "DESTADDR",
+			},
+			unexpectedKeys: []string{
+				"amount", "assetName", "assetIssuer", "numberOfShares",
+				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
+				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
+			},
+		},
+		{
+			name: "only amount field",
+			body: map[string]any{
+				"amount": int64(5000),
+			},
+			expectedJSON: map[string]any{
+				"epoch":                 float64(100),
+				"tickNumber":            float64(200),
+				"timestamp":             float64(1234567890),
+				"emittingContractIndex": float64(5),
+				"transactionHash":       "hash123",
+				"logId":                 float64(400),
+				"logDigest":             "abcd1234",
+				"type":                  float64(1),
+				"amount":                float64(5000),
+			},
+			unexpectedKeys: []string{
+				"source", "destination", "assetName", "assetIssuer", "numberOfShares",
+				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
+				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
+			},
+		},
+		{
+			name: "asset related fields",
+			body: map[string]any{
+				"assetName":             "MYASSET",
+				"assetIssuer":           "ISSUER",
+				"numberOfShares":        int64(1000),
+				"managingContractIndex": int64(3),
+			},
+			expectedJSON: map[string]any{
+				"epoch":                 float64(100),
+				"tickNumber":            float64(200),
+				"timestamp":             float64(1234567890),
+				"emittingContractIndex": float64(5),
+				"transactionHash":       "hash123",
+				"logId":                 float64(400),
+				"logDigest":             "abcd1234",
+				"type":                  float64(1),
+				"assetName":             "MYASSET",
+				"assetIssuer":           "ISSUER",
+				"numberOfShares":        float64(1000),
+				"managingContractIndex": float64(3),
+			},
+			unexpectedKeys: []string{
+				"source", "destination", "amount", "unitOfMeasurement", "numberOfDecimalPlaces",
+				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
+			},
+		},
+		{
+			name: "empty body map",
+			body: map[string]any{},
+			expectedJSON: map[string]any{
+				"epoch":                 float64(100),
+				"tickNumber":            float64(200),
+				"timestamp":             float64(1234567890),
+				"emittingContractIndex": float64(5),
+				"transactionHash":       "hash123",
+				"logId":                 float64(400),
+				"logDigest":             "abcd1234",
+				"type":                  float64(1),
+			},
+			unexpectedKeys: []string{
+				"source", "destination", "amount", "assetName", "assetIssuer", "numberOfShares",
+				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
+				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
+			},
+		},
+		{
+			name: "contract related fields",
+			body: map[string]any{
+				"contractIndex":          uint32(7),
+				"contractIndexBurnedFor": uint32(9),
+				"deductedAmount":         uint64(250),
+				"remainingAmount":        int64(750),
+			},
+			expectedJSON: map[string]any{
+				"epoch":                  float64(100),
+				"tickNumber":             float64(200),
+				"timestamp":              float64(1234567890),
+				"emittingContractIndex":  float64(5),
+				"transactionHash":        "hash123",
+				"logId":                  float64(400),
+				"logDigest":              "abcd1234",
+				"type":                   float64(1),
+				"contractIndex":          float64(7),
+				"contractIndexBurnedFor": float64(9),
+				"deductedAmount":         float64(250),
+				"remainingAmount":        float64(750),
+			},
+			unexpectedKeys: []string{
+				"source", "destination", "amount", "assetName", "assetIssuer", "numberOfShares",
+				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
+			},
+		},
 	}
 
-	if !logEvent.Ok {
-		t.Error("Expected Ok to be true")
-	}
-	if logEvent.Epoch != 100 {
-		t.Errorf("Expected Epoch 100, got %d", logEvent.Epoch)
-	}
-	if logEvent.Tick != 1000 {
-		t.Errorf("Expected Tick 1000, got %d", logEvent.Tick)
-	}
-	if logEvent.Id != 12345 {
-		t.Errorf("Expected Id 12345, got %d", logEvent.Id)
-	}
-	if logEvent.Hash != "" {
-		t.Errorf("Expected Hash to be empty, got %s", logEvent.Hash)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:                 100,
+				TickNumber:            200,
+				Index:                 300,
+				Type:                  1,
+				EmittingContractIndex: 5,
+				LogId:                 400,
+				LogDigest:             "abcd1234",
+				TransactionHash:       "hash123",
+				Timestamp:             1234567890,
+				BodySize:              50,
+				Body:                  tt.body,
+			}
+
+			result, err := LogEventToElastic(logEvent)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Serialize to JSON
+			jsonData, err := json.Marshal(result)
+			if err != nil {
+				t.Fatalf("failed to marshal JSON: %v", err)
+			}
+
+			// Deserialize to map for checking
+			var jsonMap map[string]any
+			err = json.Unmarshal(jsonData, &jsonMap)
+			if err != nil {
+				t.Fatalf("failed to unmarshal JSON: %v", err)
+			}
+
+			// Check that expected keys are present
+			for key, expectedValue := range tt.expectedJSON {
+				actualValue, exists := jsonMap[key]
+				if !exists {
+					t.Errorf("expected key '%s' to be present in JSON, but it was missing", key)
+					continue
+				}
+				if actualValue != expectedValue {
+					t.Errorf("key '%s': expected value %v, got %v", key, expectedValue, actualValue)
+				}
+			}
+
+			// Check that unexpected keys are NOT present (omitempty working)
+			for _, key := range tt.unexpectedKeys {
+				if _, exists := jsonMap[key]; exists {
+					t.Errorf("key '%s' should NOT be present in JSON (omitempty not working), but it was found with value: %v", key, jsonMap[key])
+				}
+			}
+		})
 	}
 }
 
-func TestLogEvent_JSONUnmarshalInvalidData(t *testing.T) {
-	jsonData := []byte(`{
-		"ok": "not a boolean",
-		"epoch": "not a number"
-	}`)
+func TestLogEventToElastic_NegativeAmountError(t *testing.T) {
+	logEvent := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Body: map[string]any{
+			"amount": int64(-100),
+		},
+	}
 
-	var logEvent LogEvent
-	err := json.Unmarshal(jsonData, &logEvent)
+	_, err := LogEventToElastic(logEvent)
 	if err == nil {
-		t.Fatal("Expected error for invalid JSON data, got nil")
+		t.Fatal("expected error for negative amount, got nil")
+	}
+	expectedMsg := "amount cannot be negative"
+	if !contains(err.Error(), expectedMsg) {
+		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
 	}
 }
 
-func TestLogEvent_JSONMarshalEmptyStruct(t *testing.T) {
-	logEvent := LogEvent{}
+func TestLogEventToElastic_NegativeNumberOfSharesError(t *testing.T) {
+	logEvent := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Body: map[string]any{
+			"numberOfShares": int64(-50),
+		},
+	}
 
-	jsonData, err := json.Marshal(logEvent)
+	_, err := LogEventToElastic(logEvent)
+	if err == nil {
+		t.Fatal("expected error for negative numberOfShares, got nil")
+	}
+	expectedMsg := "numberOfShares cannot be negative"
+	if !contains(err.Error(), expectedMsg) {
+		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
+func TestLogEventToElastic_NegativeManagingContractIndexError(t *testing.T) {
+	logEvent := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Body: map[string]any{
+			"managingContractIndex": int64(-5),
+		},
+	}
+
+	_, err := LogEventToElastic(logEvent)
+	if err == nil {
+		t.Fatal("expected error for negative managingContractIndex, got nil")
+	}
+	expectedMsg := "managingContractIndex cannot be negative"
+	if !contains(err.Error(), expectedMsg) {
+		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
+func TestLogEventToElastic_UnitOfMeasurementValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		value       any
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "correct length",
+			value:       "1234567",
+			expectError: false,
+		},
+		{
+			name:        "too short",
+			value:       "123456",
+			expectError: true,
+			errorMsg:    "must be exactly 7 characters",
+		},
+		{
+			name:        "too long",
+			value:       "12345678",
+			expectError: true,
+			errorMsg:    "must be exactly 7 characters",
+		},
+		{
+			name:        "wrong type",
+			value:       123,
+			expectError: true,
+			errorMsg:    "expected string",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:      100,
+				TickNumber: 200,
+				Body: map[string]any{
+					"unitOfMeasurement": tt.value,
+				},
+			}
+
+			_, err := LogEventToElastic(logEvent)
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestLogEventToElastic_NumberOfDecimalPlacesValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		value       any
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid value 0",
+			value:       float64(0),
+			expectError: false,
+		},
+		{
+			name:        "valid value 8",
+			value:       float64(8),
+			expectError: false,
+		},
+		{
+			name:        "valid value 255",
+			value:       float64(255),
+			expectError: false,
+		},
+		{
+			name:        "negative value",
+			value:       float64(-1),
+			expectError: true,
+			errorMsg:    "must be in range 0-255",
+		},
+		{
+			name:        "too large",
+			value:       float64(256),
+			expectError: true,
+			errorMsg:    "must be in range 0-255",
+		},
+		{
+			name:        "not a whole number",
+			value:       float64(3.5),
+			expectError: true,
+			errorMsg:    "must be a whole number",
+		},
+		{
+			name:        "wrong type",
+			value:       "8",
+			expectError: true,
+			errorMsg:    "expected float64",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:      100,
+				TickNumber: 200,
+				Body: map[string]any{
+					"numberOfDecimalPlaces": tt.value,
+				},
+			}
+
+			_, err := LogEventToElastic(logEvent)
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestLogEventToElastic_UnknownBodyKey(t *testing.T) {
+	logEvent := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Body: map[string]any{
+			"unknownField": "someValue",
+		},
+	}
+
+	_, err := LogEventToElastic(logEvent)
+	if err == nil {
+		t.Fatal("expected error for unknown body key, got nil")
+	}
+	expectedMsg := "unknown body key 'unknownField'"
+	if !contains(err.Error(), expectedMsg) {
+		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
+func TestLogEventToElastic_WrongDataType(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		value    any
+		errorMsg string
+	}{
+		{
+			name:     "source as number",
+			key:      "source",
+			value:    123,
+			errorMsg: "wrong data type for 'source'",
+		},
+		{
+			name:     "destination as number",
+			key:      "destination",
+			value:    456,
+			errorMsg: "wrong data type for 'destination'",
+		},
+		{
+			name:     "amount as string",
+			key:      "amount",
+			value:    "1000",
+			errorMsg: "wrong data type for 'amount'",
+		},
+		{
+			name:     "assetName as number",
+			key:      "assetName",
+			value:    789,
+			errorMsg: "wrong data type for 'assetName'",
+		},
+		{
+			name:     "numberOfShares as string",
+			key:      "numberOfShares",
+			value:    "500",
+			errorMsg: "wrong data type for 'numberOfShares'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:      100,
+				TickNumber: 200,
+				Body: map[string]any{
+					tt.key: tt.value,
+				},
+			}
+
+			_, err := LogEventToElastic(logEvent)
+			if err == nil {
+				t.Fatalf("expected error for wrong data type, got nil")
+			}
+			if !contains(err.Error(), tt.errorMsg) {
+				t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
+			}
+		})
+	}
+}
+
+func TestAssignTyped_Success(t *testing.T) {
+	var target string
+	err := assignTyped("testKey", "testValue", &target)
 	if err != nil {
-		t.Fatalf("Failed to marshal empty LogEvent: %v", err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if target != "testValue" {
+		t.Errorf("expected target='testValue', got '%s'", target)
 	}
 
-	var unmarshaled LogEvent
-	err = json.Unmarshal(jsonData, &unmarshaled)
+	var numTarget int64
+	err = assignTyped("numKey", int64(42), &numTarget)
 	if err != nil {
-		t.Fatalf("Failed to unmarshal empty LogEvent: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
+	if numTarget != 42 {
+		t.Errorf("expected numTarget=42, got %d", numTarget)
+	}
+}
 
-	if unmarshaled.Ok != false {
-		t.Error("Expected Ok to be false for empty struct")
+func TestAssignTyped_TypeMismatch(t *testing.T) {
+	var target string
+	err := assignTyped("testKey", 123, &target)
+	if err == nil {
+		t.Fatal("expected error for type mismatch, got nil")
 	}
-	if unmarshaled.Epoch != 0 {
-		t.Errorf("Expected Epoch 0, got %d", unmarshaled.Epoch)
+	expectedMsg := "wrong data type for 'testKey'"
+	if !contains(err.Error(), expectedMsg) {
+		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
 	}
-	if unmarshaled.Tick != 0 {
-		t.Errorf("Expected Tick 0, got %d", unmarshaled.Tick)
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || indexOf(s, substr) >= 0)
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
 	}
+	return -1
 }

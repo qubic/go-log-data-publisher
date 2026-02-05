@@ -80,18 +80,23 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			return -1, fmt.Errorf("unmarshalling log event [value=%s]: %w", string(record.Value), err)
 		}
 
-		val, err := json.Marshal(logEvent)
+		logEventElastic, err := domain.LogEventToElastic(logEvent)
+		if err != nil {
+			return -1, fmt.Errorf("converting log event from kafka to elastic format [value=%s]: %w", string(record.Value), err)
+		}
+
+		val, err := json.Marshal(logEventElastic)
 		if err != nil {
 			return -1, fmt.Errorf("marshalling log event [value=%v]: %w", logEvent, err)
 		}
 
 		documents = append(documents, &elastic.EsDocument{
-			Id:      strconv.Itoa(int(logEvent.Id)) + logEvent.Hash, // TODO: This way of creating the id is just a placeholder, must decide on exact id for indexing
+			Id:      strconv.Itoa(int(logEvent.LogId)),
 			Payload: val,
 		})
 
-		if logEvent.Tick > c.currentTick {
-			c.currentTick = logEvent.Tick
+		if logEvent.TickNumber > c.currentTick {
+			c.currentTick = logEvent.TickNumber
 			c.currentEpoch = logEvent.Epoch
 		}
 		c.consumeMetrics.IncProcessedMessages()
@@ -112,8 +117,6 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 }
 
 func unmarshallLogEvent(record *kgo.Record, logEvent *domain.LogEvent) error {
-
-	// TODO:  maybe we would want to add some checks on the fields
 
 	err := json.Unmarshal(record.Value, &logEvent)
 	if err != nil {
