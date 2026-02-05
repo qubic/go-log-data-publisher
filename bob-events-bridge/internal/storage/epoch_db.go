@@ -67,7 +67,7 @@ func (e *EpochDB) HasEvent(tick uint32, logID uint64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	closer.Close()
+	_ = closer.Close()
 	return true, nil
 }
 
@@ -94,7 +94,7 @@ func (e *EpochDB) StoreEvents(events []*eventsbridge.Event) error {
 	}
 
 	batch := e.db.NewBatch()
-	defer batch.Close()
+	defer batch.Close() //nolint:errcheck
 
 	for _, event := range events {
 		key := FormatKey(event.Tick, event.LogId)
@@ -125,7 +125,7 @@ func (e *EpochDB) CountEventsForTick(tick uint32) (uint32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to create iterator: %w", err)
 	}
-	defer iter.Close()
+	defer iter.Close() //nolint:errcheck
 
 	var count uint32
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -146,7 +146,7 @@ func (e *EpochDB) GetEventsForTick(tick uint32) ([]*eventsbridge.Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create iterator: %w", err)
 	}
-	defer iter.Close()
+	defer iter.Close() //nolint:errcheck
 
 	var events []*eventsbridge.Event
 
@@ -173,7 +173,7 @@ func (e *EpochDB) GetTickRange() (minTick, maxTick uint32, count uint64, err err
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to create iterator: %w", err)
 	}
-	defer iter.Close()
+	defer iter.Close() //nolint:errcheck
 
 	if !iter.First() {
 		// Empty database
@@ -208,7 +208,7 @@ func (e *EpochDB) GetTickIntervals() ([]*eventsbridge.TickInterval, uint64, erro
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create iterator: %w", err)
 	}
-	defer iter.Close()
+	defer iter.Close() //nolint:errcheck
 
 	var minTick, maxTick uint32
 	var totalEvents uint64

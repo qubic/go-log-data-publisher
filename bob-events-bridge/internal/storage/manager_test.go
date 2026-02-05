@@ -39,7 +39,7 @@ func TestEpochMigration(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Store events in epoch 1 (ticks 100-105)
 	for i := uint32(0); i < 6; i++ {
@@ -84,7 +84,7 @@ func TestCrossEpochRetrieval(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Store events: epoch 1 tick 100, epoch 1 tick 101
 	err := manager.StoreEvent(createTestEvent(1, 100, 1))
@@ -138,7 +138,7 @@ func TestManagerDiscovery(t *testing.T) {
 
 	// Create new manager with same base path (simulates restart)
 	manager2 := createTestManager(t, tempDir)
-	defer manager2.Close()
+	defer manager2.Close() //nolint:errcheck
 
 	// Assert: Both epochs are discovered
 	epochs := manager2.GetAvailableEpochs()
@@ -165,7 +165,7 @@ func TestGetOrCreateEpochDB(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Call GetOrCreateEpochDB(1) - creates new
 	db1, err := manager.GetOrCreateEpochDB(1)
@@ -196,7 +196,7 @@ func TestStateUpdatedOnStore(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Store event in epoch 1, tick 100, logID 1
 	err := manager.StoreEvent(createTestEvent(1, 100, 1))
@@ -238,7 +238,7 @@ func TestGetStatusMultipleEpochs(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Store events in epoch 1 (ticks 100-102, 3 events)
 	for i := uint32(0); i < 3; i++ {
@@ -262,9 +262,10 @@ func TestGetStatusMultipleEpochs(t *testing.T) {
 	// Find epoch 1 info
 	var epoch1Info, epoch2Info *eventsbridge.EpochInfo
 	for _, info := range status.Epochs {
-		if info.Epoch == 1 {
+		switch info.Epoch {
+		case 1:
 			epoch1Info = info
-		} else if info.Epoch == 2 {
+		case 2:
 			epoch2Info = info
 		}
 	}
@@ -294,7 +295,7 @@ func TestHasEvent(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Store an event
 	err := manager.StoreEvent(createTestEvent(1, 100, 1))
@@ -322,7 +323,7 @@ func TestMultipleEventsPerTick(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Store multiple events for the same tick
 	tick := uint32(100)
@@ -357,7 +358,7 @@ func TestMultipleEventsPerTick(t *testing.T) {
 func TestCountEventsForTick(t *testing.T) {
 	tempDir := t.TempDir()
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Store 3 events for tick 100 in epoch 1
 	for i := uint64(1); i <= 3; i++ {
@@ -396,7 +397,7 @@ func TestBasePath(t *testing.T) {
 
 	// Create manager
 	manager := createTestManager(t, tempDir)
-	defer manager.Close()
+	defer manager.Close() //nolint:errcheck
 
 	// Verify base path
 	require.Equal(t, tempDir, manager.BasePath())

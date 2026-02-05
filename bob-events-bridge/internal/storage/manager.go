@@ -43,7 +43,7 @@ func NewManager(basePath string, logger *zap.Logger) (*Manager, error) {
 
 	// Discover and open existing epoch databases
 	if err := m.discoverEpochDBs(); err != nil {
-		state.Close()
+		_ = state.Close()
 		return nil, fmt.Errorf("failed to discover epoch dbs: %w", err)
 	}
 

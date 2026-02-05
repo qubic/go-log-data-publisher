@@ -53,20 +53,20 @@ func (c *WSClient) Connect(ctx context.Context) (*WelcomeMessage, error) {
 	// Read the welcome message
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.connected = false
 		return nil, fmt.Errorf("failed to read welcome message: %w", err)
 	}
 
 	var welcome WelcomeMessage
 	if err := json.Unmarshal(msg, &welcome); err != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.connected = false
 		return nil, fmt.Errorf("failed to parse welcome message: %w", err)
 	}
 
 	if welcome.Type != MessageTypeWelcome {
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.connected = false
 		return nil, fmt.Errorf("expected welcome message, got: %s", welcome.Type)
 	}
@@ -179,7 +179,7 @@ func (c *WSClient) Close() error {
 
 	// Send close message
 	deadline := time.Now().Add(time.Second)
-	c.conn.WriteControl(websocket.CloseMessage,
+	_ = c.conn.WriteControl(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
 		deadline)
 

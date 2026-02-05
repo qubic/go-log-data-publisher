@@ -140,7 +140,7 @@ func (p *Processor) Stop() {
 	p.mu.Unlock()
 
 	if p.client != nil {
-		p.client.Close()
+		_ = p.client.Close()
 	}
 }
 
@@ -180,7 +180,7 @@ func (p *Processor) connectAndProcess(ctx context.Context) error {
 	}
 
 	if err := p.client.Subscribe(subscriptions, lastTickPtr); err != nil {
-		p.client.Close()
+		_ = p.client.Close()
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 

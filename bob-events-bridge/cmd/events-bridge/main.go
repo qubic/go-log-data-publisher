@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		panic("failed to create logger: " + err.Error())
 	}
-	defer logger.Sync()
+	defer logger.Sync() //nolint:errcheck
 
 	logger.Info("Starting bob-events-bridge",
 		zap.String("version", config.Version),
@@ -64,7 +64,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize storage", zap.Error(err))
 	}
-	defer storageMgr.Close()
+	defer storageMgr.Close() //nolint:errcheck
 
 	logger.Info("Storage initialized",
 		zap.Strings("epochs", epochsToStrings(storageMgr.GetAvailableEpochs())))
@@ -85,7 +85,7 @@ func main() {
 	if cfg.Kafka.Enabled {
 		brokers := strings.Split(cfg.Kafka.Brokers, ",")
 		kafkaPublisher = kafka.NewProducer(brokers, cfg.Kafka.Topic, logger)
-		defer kafkaPublisher.Close()
+		defer kafkaPublisher.Close() //nolint:errcheck
 		logger.Info("Kafka publisher enabled",
 			zap.Strings("brokers", brokers),
 			zap.String("topic", cfg.Kafka.Topic))

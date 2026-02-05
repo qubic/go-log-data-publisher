@@ -83,7 +83,7 @@ func (s *StateStore) LoadState() (*State, error) {
 // UpdateState atomically updates the processing state
 func (s *StateStore) UpdateState(epoch uint32, logID int64, tick uint32) error {
 	batch := s.db.NewBatch()
-	defer batch.Close()
+	defer batch.Close() //nolint:errcheck
 
 	// Set current epoch
 	epochVal := make([]byte, 4)
@@ -119,7 +119,7 @@ func (s *StateStore) UpdateEpochTickRange(epoch, tick uint32) error {
 	maxKey := fmt.Sprintf(keyEpochMaxTick, epoch)
 
 	batch := s.db.NewBatch()
-	defer batch.Close()
+	defer batch.Close() //nolint:errcheck
 
 	// Check and update min tick
 	currentMin, hasMin, err := s.getUint32(minKey)
@@ -215,7 +215,7 @@ func (s *StateStore) getUint32(key string) (uint32, bool, error) {
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to get %s: %w", key, err)
 	}
-	defer closer.Close()
+	defer closer.Close() //nolint:errcheck
 
 	if len(val) < 4 {
 		return 0, false, fmt.Errorf("invalid value length for %s: %d", key, len(val))
@@ -232,7 +232,7 @@ func (s *StateStore) getInt64(key string) (int64, bool, error) {
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to get %s: %w", key, err)
 	}
-	defer closer.Close()
+	defer closer.Close() //nolint:errcheck
 
 	if len(val) < 8 {
 		return 0, false, fmt.Errorf("invalid value length for %s: %d", key, len(val))
@@ -249,7 +249,7 @@ func (s *StateStore) getUint64(key string) (uint64, bool, error) {
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to get %s: %w", key, err)
 	}
-	defer closer.Close()
+	defer closer.Close() //nolint:errcheck
 
 	if len(val) < 8 {
 		return 0, false, fmt.Errorf("invalid value length for %s: %d", key, len(val))
