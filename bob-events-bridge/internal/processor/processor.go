@@ -41,6 +41,7 @@ type Processor struct {
 	lastTick       uint32
 	eventsReceived uint64
 	tickEventIndex uint32
+	tickForIndex   uint32 // The tick that tickEventIndex is valid for
 
 	pendingBatch *tickBatch
 }
@@ -81,6 +82,7 @@ func (p *Processor) Start(ctx context.Context) error {
 					zap.Error(err))
 			} else {
 				p.tickEventIndex = count
+				p.tickForIndex = state.LastTick
 				p.logger.Info("Recovered tick event index",
 					zap.Uint32("tick", state.LastTick),
 					zap.Uint32("tickEventIndex", p.tickEventIndex))
@@ -375,6 +377,15 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 			return fmt.Errorf("failed to flush batch on tick change: %w", err)
 		}
 		p.tickEventIndex = 0
+		p.tickForIndex = payload.Tick
+	}
+
+	// Reset index if processing a different tick than what tickEventIndex was recovered/set for.
+	// This handles the case where pendingBatch is nil (e.g., all events for the previous tick
+	// were deduplicated) but we're now processing a new tick.
+	if p.tickForIndex != 0 && p.tickForIndex != payload.Tick {
+		p.tickEventIndex = 0
+		p.tickForIndex = payload.Tick
 	}
 
 	// Deduplication check: skip if we already have this event
@@ -435,6 +446,10 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 		p.pendingBatch = &tickBatch{
 			tick:  payload.Tick,
 			epoch: uint32(payload.Epoch),
+		}
+		// Track which tick the index is for
+		if p.tickForIndex == 0 {
+			p.tickForIndex = payload.Tick
 		}
 	}
 

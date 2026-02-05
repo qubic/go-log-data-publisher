@@ -1070,6 +1070,139 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 	assert.Equal(t, uint64(1), msgs[0].LogID)
 }
 
+// TestE2E_IndexResetAfterDeduplication tests that IndexInTick resets to 0 for a new tick
+// even when all events from the previous tick were deduplicated (pendingBatch is nil).
+// This was a bug where tickEventIndex was recovered for lastTick but not reset when
+// transitioning to a new tick if pendingBatch was nil.
+func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
+	tempDir := t.TempDir()
+	tickOld := uint32(22000050) // Previous tick
+	tickNew := uint32(22000051) // New tick
+
+	// Phase 1: Process 3 events for tickOld and stop
+	func() {
+		mockBob := NewMockBobServer(145, 22000000)
+		defer mockBob.Close()
+
+		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		require.NoError(t, err)
+
+		mockKafka := kafka.NewMockPublisher()
+		cfg := CreateTestConfig(mockBob, tempDir)
+		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := startProcessor(ctx, proc)
+
+		_, err = mockBob.WaitForSubscription(5 * time.Second)
+		require.NoError(t, err)
+
+		// Send 3 events for tickOld
+		for i := uint64(1); i <= 3; i++ {
+			payload := CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
+				"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+				"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+				"amount": i,
+			}, "2024-06-15 14:30:00")
+			err = mockBob.SendLogMessage(payload, 0, 0, false)
+			require.NoError(t, err)
+		}
+		mockBob.SendCatchUpComplete(0, 3, 3)
+
+		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+			_, events, _ := storageMgr.GetEventsForTick(tickOld)
+			return len(events) >= 3
+		}, "3 events should be stored for tickOld")
+
+		// Verify indexes are 0, 1, 2
+		msgs := mockKafka.Messages()
+		require.Len(t, msgs, 3)
+		for i, msg := range msgs {
+			require.Equal(t, uint64(i), msg.Index, "Phase 1: event %d should have index %d", i, i)
+		}
+
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	// Phase 2: Restart, resend tickOld events (will be deduplicated), then send tickNew events.
+	// The tickNew events should start with index 0, not index 3.
+	mockBob2 := NewMockBobServer(145, 22000000)
+	defer mockBob2.Close()
+
+	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	mockKafka2 := kafka.NewMockPublisher()
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc2)
+
+	defer func() {
+		stopProcessor(cancel, proc2, done)
+		_ = storageMgr2.Close()
+	}()
+
+	_, err = mockBob2.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Resend the 3 events for tickOld (these will be deduplicated - already in storage)
+	// This simulates bob's catch-up behavior after reconnect
+	for i := uint64(1); i <= 3; i++ {
+		payload := CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		}, "2024-06-15 14:30:00")
+		err = mockBob2.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	// Now send 2 events for tickNew (these should get index 0, 1 - NOT 3, 4)
+	for i := uint64(4); i <= 5; i++ {
+		payload := CreateLogPayloadWithTimestamp(145, tickNew, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		}, "2024-06-15 14:30:01")
+		err = mockBob2.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+	mockBob2.SendCatchUpComplete(0, 5, 5)
+
+	// Wait for the new events to be stored
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		_, events, _ := storageMgr2.GetEventsForTick(tickNew)
+		return len(events) >= 2
+	}, "2 events should be stored for tickNew")
+
+	// Verify that tickNew events have indexes 0 and 1 in Kafka (NOT 3 and 4)
+	msgs := mockKafka2.Messages()
+	require.Len(t, msgs, 2, "Only 2 new events should be published to Kafka (tickOld events were deduplicated)")
+
+	// The events should have index 0 and 1 for tickNew
+	for i, msg := range msgs {
+		require.Equal(t, uint64(i), msg.Index, "tickNew event %d should have index %d, not %d", i, i, msg.Index)
+		require.Equal(t, tickNew, msg.TickNumber, "Event should be for tickNew")
+	}
+
+	// Also verify storage IndexInTick values
+	_, eventsNew, err := storageMgr2.GetEventsForTick(tickNew)
+	require.NoError(t, err)
+	require.Len(t, eventsNew, 2)
+
+	indexValues := make(map[uint32]bool)
+	for _, event := range eventsNew {
+		indexValues[event.IndexInTick] = true
+	}
+	require.True(t, indexValues[0], "tickNew should have event with IndexInTick=0")
+	require.True(t, indexValues[1], "tickNew should have event with IndexInTick=1")
+}
+
 // TestE2E_KafkaDeduplication tests that deduplicated events are NOT published to Kafka
 func TestE2E_KafkaDeduplication(t *testing.T) {
 	tempDir := t.TempDir()
