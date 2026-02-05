@@ -66,7 +66,6 @@ func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
 		case "amount":
 			err = assignTyped(key, value, &logEventElastic.Amount)
 			if err == nil && logEventElastic.Amount < 0 {
-				// TODO: decide if elastic index needs to be changed to make the field signed
 				err = fmt.Errorf("amount cannot be negative, got %d", logEventElastic.Amount)
 			}
 		case "assetName":
@@ -76,13 +75,11 @@ func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
 		case "numberOfShares":
 			err = assignTyped(key, value, &logEventElastic.NumberOfShares)
 			if err == nil && logEventElastic.NumberOfShares < 0 {
-				// TODO: decide if elastic index needs to be changed to make the field signed
 				err = fmt.Errorf("numberOfShares cannot be negative, got %d", logEventElastic.NumberOfShares)
 			}
 		case "managingContractIndex":
 			err = assignTyped(key, value, &logEventElastic.ManagingContractIndex)
 			if err == nil && logEventElastic.ManagingContractIndex < 0 {
-				// TODO: decide if elastic index needs to be changed to make the field signed
 				err = fmt.Errorf("managingContractIndex cannot be negative, got %d", logEventElastic.ManagingContractIndex)
 			}
 		case "unitOfMeasurement":
