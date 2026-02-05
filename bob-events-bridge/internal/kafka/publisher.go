@@ -31,7 +31,7 @@ func NewProducer(brokers []string, topic string, logger *zap.Logger) *Producer {
 		Balancer:               &kafkago.Hash{},
 		RequiredAcks:           kafkago.RequireAll,
 		Compression:            compress.Lz4,
-		AllowAutoTopicCreation: true,
+		AllowAutoTopicCreation: false,
 	}
 
 	return &Producer{
