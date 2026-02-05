@@ -14,11 +14,11 @@ import (
 var ErrTimeout = errors.New("timeout waiting for condition")
 
 // CreateTestConfig creates a test configuration pointing to the mock server
-func CreateTestConfig(wsURL, storagePath string) *config.Config {
+func CreateTestConfig(mockBob *MockBobServer, storagePath string) *config.Config {
 	return &config.Config{
 		Bob: config.BobConfig{
-			WebSocketURL: wsURL,
-			StatusURL:    "http://localhost:40420/status",
+			WebSocketURL: mockBob.URL(),
+			StatusURL:    mockBob.StatusURL(),
 			LogTypes:     "0 1 2 3",
 		},
 		Storage: config.StorageConfig{

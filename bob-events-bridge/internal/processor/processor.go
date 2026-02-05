@@ -87,9 +87,17 @@ func (p *Processor) Start(ctx context.Context) error {
 			}
 		}
 	} else {
-		p.logger.Info("Starting fresh, no previous state found")
+		// Clean start — fetch initialTick from bob status endpoint
+		status, err := bob.FetchStatus(ctx, p.cfg.Bob.StatusURL)
+		if err != nil {
+			return fmt.Errorf("failed to fetch bob status for initial tick: %w", err)
+		}
+		p.lastTick = status.InitialTick
+		p.logger.Info("Starting fresh from bob's initial tick",
+			zap.Uint32("initialTick", p.lastTick))
 	}
 
+	// Override start tick if configured (overrides both persisted state and fresh start)
 	if p.cfg.Bob.OverrideStartTick {
 		p.lastTick = p.cfg.Bob.StartTick
 		p.lastLogID = 0
@@ -165,17 +173,13 @@ func (p *Processor) connectAndProcess(ctx context.Context) error {
 		}
 	}
 
-	// Subscribe with both lastLogID and lastTick for crash recovery
-	var lastLogIDPtr *int64
+	// Subscribe with lastTick for crash recovery (tick-based resumption only)
 	var lastTickPtr *uint32
-	if p.lastLogID > 0 {
-		lastLogIDPtr = &p.lastLogID
-	}
 	if p.lastTick > 0 {
 		lastTickPtr = &p.lastTick
 	}
 
-	if err := p.client.Subscribe(subscriptions, lastLogIDPtr, lastTickPtr); err != nil {
+	if err := p.client.Subscribe(subscriptions, lastTickPtr); err != nil {
 		p.client.Close()
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}

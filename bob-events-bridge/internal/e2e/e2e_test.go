@@ -51,7 +51,7 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	require.NoError(t, err, "Failed to create storage manager")
 
 	// 3. Create processor
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -106,7 +106,7 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -170,7 +170,7 @@ func TestE2E_EpochTransition(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -233,7 +233,7 @@ func TestE2E_Deduplication(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -289,7 +289,7 @@ func TestE2E_StatePersistence(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -337,7 +337,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 		require.NoError(t, err)
 
-		cfg := CreateTestConfig(mockBob.URL(), tempDir)
+		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -369,7 +369,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg2 := CreateTestConfig(mockBob2.URL(), tempDir)
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil)
 
@@ -402,7 +402,7 @@ func TestE2E_GetStatus(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -457,7 +457,7 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -514,7 +514,7 @@ func TestE2E_NonOKLogsSkipped(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -569,7 +569,7 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	// Subscribe to multiple log types
 	subs := []config.SubscriptionEntry{
 		{SCIndex: 0, LogType: 0}, // qu_transfer
@@ -637,7 +637,7 @@ func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -723,7 +723,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 		require.NoError(t, err)
 
-		cfg := CreateTestConfig(mockBob.URL(), tempDir)
+		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
@@ -761,7 +761,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg2 := CreateTestConfig(mockBob2.URL(), tempDir)
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil)
 
@@ -827,7 +827,7 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 	require.NoError(t, err)
 
 	mockKafka := kafka.NewMockPublisher()
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
 
@@ -889,7 +889,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 	require.NoError(t, err)
 
 	mockKafka := kafka.NewMockPublisher()
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{
 		{SCIndex: 0, LogType: 0},
 		{SCIndex: 0, LogType: 1},
@@ -1016,7 +1016,7 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 	// Make the first publish fail
 	mockKafka.SetFailNext(fmt.Errorf("kafka broker unavailable"))
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
 
@@ -1084,7 +1084,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		require.NoError(t, err)
 
 		mockKafka := kafka.NewMockPublisher()
-		cfg := CreateTestConfig(mockBob.URL(), tempDir)
+		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
 
@@ -1123,7 +1123,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 	require.NoError(t, err)
 
 	mockKafka2 := kafka.NewMockPublisher()
-	cfg2 := CreateTestConfig(mockBob2.URL(), tempDir)
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
 	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2)
 
