@@ -132,11 +132,37 @@ func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
 }
 
 func assignTyped[T any](key string, value any, target *T) error {
-	typed, ok := value.(T)
-	if !ok {
-		var zero T
-		return fmt.Errorf("wrong data type for '%s'. expected %T, got %T", key, zero, value)
+	// Try direct type match first
+	if typed, ok := value.(T); ok {
+		*target = typed
+		return nil
 	}
-	*target = typed
-	return nil
+
+	// Handle JSON float64 to integer conversions
+	if num, ok := value.(float64); ok {
+		var zero T
+		switch any(zero).(type) {
+		case int64:
+			if num != float64(int64(num)) {
+				return fmt.Errorf("'%s' must be a whole number, got %f", key, num)
+			}
+			*target = any(int64(num)).(T)
+			return nil
+		case uint64:
+			if num < 0 || num != float64(uint64(num)) {
+				return fmt.Errorf("'%s' must be a non-negative whole number, got %f", key, num)
+			}
+			*target = any(uint64(num)).(T)
+			return nil
+		case uint32:
+			if num < 0 || num != float64(uint32(num)) {
+				return fmt.Errorf("'%s' must be a valid uint32, got %f", key, num)
+			}
+			*target = any(uint32(num)).(T)
+			return nil
+		}
+	}
+
+	var zero T
+	return fmt.Errorf("wrong data type for '%s'. expected %T, got %T", key, zero, value)
 }

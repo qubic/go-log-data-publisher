@@ -1,15 +1,18 @@
 name: Create log events consumer image (branch)
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Test log events consumer"]
+    types:
+      - completed
     branches:
       - 'log-events-consumer'
-    paths:
-      - 'log-events-consumer/**'
 
 jobs:
   docker-publish:
     runs-on: ubuntu-latest
+    # Only run if the test workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     permissions:
       contents: read

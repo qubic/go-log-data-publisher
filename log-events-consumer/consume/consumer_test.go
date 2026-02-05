@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/qubic/log-events-consumer/domain"
@@ -45,21 +46,24 @@ func (m *mockElasticClient) BulkIndex(ctx context.Context, data []*elastic.EsDoc
 }
 
 func TestConsumeBatch_Success(t *testing.T) {
-	logEvent := domain.LogEvent{
-		Ok:        true,
-		Epoch:     100,
-		Tick:      1000,
-		Id:        12345,
-		Hash:      "test-hash",
-		Type:      1,
-		TypeName:  "TestEvent",
-		Timestamp: "2024-01-01T00:00:00Z",
-		TxHash:    "tx-hash",
-		BodySize:  100,
-		Body:      "test-body",
-	}
-
-	logEventJSON, _ := json.Marshal(logEvent)
+	// Create JSON as it would come from Kafka (numbers are float64 after unmarshaling)
+	logEventJSON := []byte(`{
+		"epoch": 100,
+		"tickNumber": 1000,
+		"index": 1,
+		"type": 1,
+		"emittingContractIndex": 5,
+		"logId": 12345,
+		"logDigest": "test-digest",
+		"transactionHash": "tx-hash",
+		"timestamp": 1704067200,
+		"bodySize": 100,
+		"body": {
+			"source": "SOURCEADDRESS",
+			"destination": "DESTADDRESS",
+			"amount": 1000
+		}
+	}`)
 
 	mockKafka := &mockKafkaClient{
 		pollRecordsFunc: func(ctx context.Context, maxPollRecords int) kgo.Fetches {
@@ -111,6 +115,35 @@ func TestConsumeBatch_Success(t *testing.T) {
 
 	if len(indexedDocs) != 1 {
 		t.Fatalf("Expected 1 document to be indexed, got: %d", len(indexedDocs))
+	}
+
+	// Verify the document ID
+	expectedID := "12345"
+	if indexedDocs[0].Id != expectedID {
+		t.Errorf("Expected document ID %s, got: %s", expectedID, indexedDocs[0].Id)
+	}
+
+	// Verify the JSON contains converted fields (not the original body map)
+	var elasticDoc map[string]any
+	err = json.Unmarshal(indexedDocs[0].Payload, &elasticDoc)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal indexed document: %v", err)
+	}
+
+	// Check that body fields were flattened to top-level
+	if elasticDoc["source"] != "SOURCEADDRESS" {
+		t.Errorf("Expected source=SOURCEADDRESS, got: %v", elasticDoc["source"])
+	}
+	if elasticDoc["destination"] != "DESTADDRESS" {
+		t.Errorf("Expected destination=DESTADDRESS, got: %v", elasticDoc["destination"])
+	}
+	if elasticDoc["amount"] != float64(1000) {
+		t.Errorf("Expected amount=1000, got: %v", elasticDoc["amount"])
+	}
+
+	// Verify the original body map is not in the elastic document
+	if _, exists := elasticDoc["body"]; exists {
+		t.Error("Expected 'body' field to not exist in elastic document")
 	}
 
 	if consumer.currentTick != 1000 {
@@ -183,12 +216,65 @@ func TestConsumeBatch_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestConsumeBatch_ConversionError(t *testing.T) {
+	// Test with invalid body field (unknown key)
+	logEvent := domain.LogEvent{
+		Epoch:           100,
+		TickNumber:      1000,
+		LogId:           12345,
+		LogDigest:       "test-digest",
+		TransactionHash: "tx-hash",
+		Timestamp:       1704067200,
+		Body: map[string]any{
+			"unknownField": "invalid",
+		},
+	}
+
+	logEventJSON, _ := json.Marshal(logEvent)
+
+	mockKafka := &mockKafkaClient{
+		pollRecordsFunc: func(ctx context.Context, maxPollRecords int) kgo.Fetches {
+			record := &kgo.Record{
+				Value: logEventJSON,
+			}
+			return kgo.Fetches{
+				{
+					Topics: []kgo.FetchTopic{
+						{
+							Topic: "test-topic",
+							Partitions: []kgo.FetchPartition{
+								{
+									Partition: 0,
+									Records:   []*kgo.Record{record},
+								},
+							},
+						},
+					},
+				},
+			}
+		},
+	}
+
+	mockElastic := &mockElasticClient{}
+	m := metrics.NewMetrics("test_conversion_error")
+	consumer := NewConsumer(mockKafka, mockElastic, m)
+
+	_, err := consumer.consumeBatch(context.Background())
+
+	if err == nil {
+		t.Fatal("Expected conversion error for unknown body field, got nil")
+	}
+}
+
 func TestConsumeBatch_ElasticError(t *testing.T) {
 	logEvent := domain.LogEvent{
-		Ok:   true,
-		Tick: 1000,
-		Id:   12345,
-		Hash: "test-hash",
+		Epoch:           100,
+		TickNumber:      1000,
+		LogId:           12345,
+		LogDigest:       "test-digest",
+		TransactionHash: "tx-hash",
+		Timestamp:       1704067200,
+		Body:            map[string]any{},
 	}
 
 	logEventJSON, _ := json.Marshal(logEvent)
@@ -235,10 +321,13 @@ func TestConsumeBatch_ElasticError(t *testing.T) {
 
 func TestConsumeBatch_CommitError(t *testing.T) {
 	logEvent := domain.LogEvent{
-		Ok:   true,
-		Tick: 1000,
-		Id:   12345,
-		Hash: "test-hash",
+		Epoch:           100,
+		TickNumber:      1000,
+		LogId:           12345,
+		LogDigest:       "test-digest",
+		TransactionHash: "tx-hash",
+		Timestamp:       1704067200,
+		Body:            map[string]any{},
 	}
 
 	logEventJSON, _ := json.Marshal(logEvent)
@@ -283,16 +372,22 @@ func TestConsumeBatch_CommitError(t *testing.T) {
 
 func TestConsumeBatch_MultipleRecords(t *testing.T) {
 	logEvent1 := domain.LogEvent{
-		Epoch: 100,
-		Tick:  1000,
-		Id:    1,
-		Hash:  "hash1",
+		Epoch:           100,
+		TickNumber:      1000,
+		LogId:           1,
+		LogDigest:       "digest1",
+		TransactionHash: "hash1",
+		Timestamp:       1704067200,
+		Body:            map[string]any{},
 	}
 	logEvent2 := domain.LogEvent{
-		Epoch: 100,
-		Tick:  1001,
-		Id:    2,
-		Hash:  "hash2",
+		Epoch:           100,
+		TickNumber:      1001,
+		LogId:           2,
+		LogDigest:       "digest2",
+		TransactionHash: "hash2",
+		Timestamp:       1704067201,
+		Body:            map[string]any{},
 	}
 
 	logEvent1JSON, _ := json.Marshal(logEvent1)
@@ -374,17 +469,19 @@ func TestConsume_ContextCancellation(t *testing.T) {
 
 func TestUnmarshallLogEvent_Success(t *testing.T) {
 	logEvent := domain.LogEvent{
-		Ok:        true,
-		Epoch:     100,
-		Tick:      1000,
-		Id:        12345,
-		Hash:      "test-hash",
-		Type:      1,
-		TypeName:  "TestEvent",
-		Timestamp: "2024-01-01T00:00:00Z",
-		TxHash:    "tx-hash",
-		BodySize:  100,
-		Body:      "test-body",
+		Epoch:                 100,
+		TickNumber:            1000,
+		Index:                 1,
+		Type:                  1,
+		EmittingContractIndex: 5,
+		LogId:                 12345,
+		LogDigest:             "test-digest",
+		TransactionHash:       "tx-hash",
+		Timestamp:             1704067200,
+		BodySize:              100,
+		Body: map[string]any{
+			"source": "SOURCEADDRESS",
+		},
 	}
 
 	logEventJSON, _ := json.Marshal(logEvent)
@@ -400,12 +497,20 @@ func TestUnmarshallLogEvent_Success(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	if result.Id != logEvent.Id {
-		t.Errorf("Expected Id %d, got: %d", logEvent.Id, result.Id)
+	if result.LogId != logEvent.LogId {
+		t.Errorf("Expected LogId %d, got: %d", logEvent.LogId, result.LogId)
 	}
 
-	if result.Hash != logEvent.Hash {
-		t.Errorf("Expected Hash %s, got: %s", logEvent.Hash, result.Hash)
+	if result.LogDigest != logEvent.LogDigest {
+		t.Errorf("Expected LogDigest %s, got: %s", logEvent.LogDigest, result.LogDigest)
+	}
+
+	if result.TickNumber != logEvent.TickNumber {
+		t.Errorf("Expected TickNumber %d, got: %d", logEvent.TickNumber, result.TickNumber)
+	}
+
+	if result.TransactionHash != logEvent.TransactionHash {
+		t.Errorf("Expected TransactionHash %s, got: %s", logEvent.TransactionHash, result.TransactionHash)
 	}
 }
 
@@ -420,4 +525,71 @@ func TestUnmarshallLogEvent_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for invalid JSON, got nil")
 	}
+}
+
+func TestConsumeBatch_LogIdOverflow(t *testing.T) {
+	// Create a LogEvent with LogId exceeding MaxInt
+	logEvent := domain.LogEvent{
+		Epoch:           100,
+		TickNumber:      1000,
+		LogId:           uint64(math.MaxInt) + 1, // This will overflow when cast to int
+		LogDigest:       "test-digest",
+		TransactionHash: "tx-hash",
+		Timestamp:       1704067200,
+		Body:            map[string]any{},
+	}
+
+	logEventJSON, _ := json.Marshal(logEvent)
+
+	mockKafka := &mockKafkaClient{
+		pollRecordsFunc: func(ctx context.Context, maxPollRecords int) kgo.Fetches {
+			record := &kgo.Record{
+				Value: logEventJSON,
+			}
+			return kgo.Fetches{
+				{
+					Topics: []kgo.FetchTopic{
+						{
+							Topic: "test-topic",
+							Partitions: []kgo.FetchPartition{
+								{
+									Partition: 0,
+									Records:   []*kgo.Record{record},
+								},
+							},
+						},
+					},
+				},
+			}
+		},
+	}
+
+	mockElastic := &mockElasticClient{}
+	m := metrics.NewMetrics("test_overflow")
+	consumer := NewConsumer(mockKafka, mockElastic, m)
+
+	_, err := consumer.consumeBatch(context.Background())
+
+	if err == nil {
+		t.Fatal("Expected error for LogId overflow, got nil")
+	}
+
+	// Verify the error message mentions overflow
+	expectedMsg := "exceeds maximum int value"
+	if !contains(err.Error(), expectedMsg) {
+		t.Errorf("Expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && indexOf(s, substr) >= 0
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }

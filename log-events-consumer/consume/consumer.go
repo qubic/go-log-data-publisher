@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"time"
 
@@ -88,6 +89,11 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 		val, err := json.Marshal(logEventElastic)
 		if err != nil {
 			return -1, fmt.Errorf("marshalling log event [value=%v]: %w", logEvent, err)
+		}
+
+		// Check for potential overflow when converting uint64 to int
+		if logEvent.LogId > math.MaxInt {
+			return -1, fmt.Errorf("logId %d exceeds maximum int value (%d), cannot convert to document ID", logEvent.LogId, math.MaxInt)
 		}
 
 		documents = append(documents, &elastic.EsDocument{

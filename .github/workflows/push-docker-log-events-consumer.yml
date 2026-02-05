@@ -6,8 +6,25 @@ on:
       - 'log-events-consumer/v*.*.*'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.25.x
+          cache: false
+
+      - name: Run tests
+        run: go test -p 1 -tags ci ./...
+        working-directory: log-events-consumer
+
   docker-publish:
     runs-on: ubuntu-latest
+    needs: test
 
     permissions:
       contents: read

@@ -601,6 +601,188 @@ func TestAssignTyped_TypeMismatch(t *testing.T) {
 	}
 }
 
+func TestAssignTyped_JSONFloat64ToInt64(t *testing.T) {
+	tests := []struct {
+		name        string
+		value       any
+		expected    int64
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:     "float64 whole number to int64",
+			value:    float64(42),
+			expected: 42,
+		},
+		{
+			name:     "float64 negative to int64",
+			value:    float64(-100),
+			expected: -100,
+		},
+		{
+			name:     "float64 large number to int64",
+			value:    float64(1000000),
+			expected: 1000000,
+		},
+		{
+			name:        "float64 decimal to int64",
+			value:       float64(42.5),
+			expectError: true,
+			errorMsg:    "must be a whole number",
+		},
+		{
+			name:     "direct int64 to int64",
+			value:    int64(99),
+			expected: 99,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var target int64
+			err := assignTyped("testKey", tt.value, &target)
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if target != tt.expected {
+					t.Errorf("expected %d, got %d", tt.expected, target)
+				}
+			}
+		})
+	}
+}
+
+func TestAssignTyped_JSONFloat64ToUint64(t *testing.T) {
+	tests := []struct {
+		name        string
+		value       any
+		expected    uint64
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:     "float64 positive to uint64",
+			value:    float64(42),
+			expected: 42,
+		},
+		{
+			name:     "float64 zero to uint64",
+			value:    float64(0),
+			expected: 0,
+		},
+		{
+			name:        "float64 negative to uint64",
+			value:       float64(-1),
+			expectError: true,
+			errorMsg:    "must be a non-negative whole number",
+		},
+		{
+			name:        "float64 decimal to uint64",
+			value:       float64(42.5),
+			expectError: true,
+			errorMsg:    "must be a non-negative whole number",
+		},
+		{
+			name:     "direct uint64 to uint64",
+			value:    uint64(99),
+			expected: 99,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var target uint64
+			err := assignTyped("testKey", tt.value, &target)
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if target != tt.expected {
+					t.Errorf("expected %d, got %d", tt.expected, target)
+				}
+			}
+		})
+	}
+}
+
+func TestAssignTyped_JSONFloat64ToUint32(t *testing.T) {
+	tests := []struct {
+		name        string
+		value       any
+		expected    uint32
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:     "float64 positive to uint32",
+			value:    float64(42),
+			expected: 42,
+		},
+		{
+			name:     "float64 max uint32",
+			value:    float64(4294967295),
+			expected: 4294967295,
+		},
+		{
+			name:        "float64 exceeds uint32",
+			value:       float64(4294967296),
+			expectError: true,
+			errorMsg:    "must be a valid uint32",
+		},
+		{
+			name:        "float64 negative to uint32",
+			value:       float64(-1),
+			expectError: true,
+			errorMsg:    "must be a valid uint32",
+		},
+		{
+			name:     "direct uint32 to uint32",
+			value:    uint32(99),
+			expected: 99,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var target uint32
+			err := assignTyped("testKey", tt.value, &target)
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if target != tt.expected {
+					t.Errorf("expected %d, got %d", tt.expected, target)
+				}
+			}
+		})
+	}
+}
+
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || indexOf(s, substr) >= 0)
