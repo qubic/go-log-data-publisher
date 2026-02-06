@@ -9,7 +9,7 @@ type LogEvent struct {
 	TickNumber            uint32         `json:"tickNumber"`
 	Index                 uint64         `json:"index"`
 	Type                  uint32         `json:"type"`
-	EmittingContractIndex uint32         `json:"emittingContractIndex,omitempty"`
+	EmittingContractIndex uint32         `json:"emittingContractIndex"`
 	LogId                 uint64         `json:"logId"`
 	LogDigest             string         `json:"logDigest"` // hex
 	TransactionHash       string         `json:"transactionHash"`
@@ -22,7 +22,7 @@ type LogEventElastic struct {
 	Epoch                 uint32 `json:"epoch"`
 	TickNumber            uint32 `json:"tickNumber"`
 	Timestamp             int64  `json:"timestamp"`
-	EmittingContractIndex uint32 `json:"emittingContractIndex,omitempty"`
+	EmittingContractIndex uint32 `json:"emittingContractIndex"`
 	TransactionHash       string `json:"transactionHash"`
 	LogId                 uint64 `json:"logId"`
 	LogDigest             string `json:"logDigest"`

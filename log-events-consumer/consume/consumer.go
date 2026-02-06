@@ -86,18 +86,24 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			return -1, fmt.Errorf("converting log event from kafka to elastic format [value=%s]: %w", string(record.Value), err)
 		}
 
+		// Skip sending to elastic log events which are regular QU transfers with no amount.
+		if logEventElastic.Type == 0 && logEventElastic.ContractIndex == 0 && logEventElastic.Amount == 0 {
+			continue
+		}
+
 		val, err := json.Marshal(logEventElastic)
 		if err != nil {
 			return -1, fmt.Errorf("marshalling log event [value=%v]: %w", logEvent, err)
 		}
 
-		// Check for potential overflow when converting uint64 to int
-		if logEvent.LogId > math.MaxInt {
-			return -1, fmt.Errorf("logId %d exceeds maximum int value (%d), cannot convert to document ID", logEvent.LogId, math.MaxInt)
+		// Prevent overflow when converting epoch/logId to int for document ID.
+		if uint64(logEvent.Epoch) > math.MaxInt || logEvent.LogId > math.MaxInt {
+			return -1, fmt.Errorf("epoch %d or logId %d exceeds maximum int value (%d), cannot convert to document ID", logEvent.Epoch, logEvent.LogId, math.MaxInt)
 		}
 
+		// Use separator to prevent ID collisions (e.g., epoch=1,logId=23 vs epoch=12,logId=3).
 		documents = append(documents, &elastic.EsDocument{
-			Id:      strconv.Itoa(int(logEvent.LogId)),
+			Id:      strconv.Itoa(int(logEvent.Epoch)) + "-" + strconv.Itoa(int(logEvent.LogId)),
 			Payload: val,
 		})
 
