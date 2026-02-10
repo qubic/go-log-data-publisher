@@ -2,7 +2,21 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 )
+
+// Special system transactions
+// Qubic supports, per tick, 1024 regular user transactions and a couple special transactions that SCs execute.
+// In the core node code their index is defined as the NR_OF_TRANSACTIONS_PER_TICK + offset.
+// In this code, they are mapped to their appropriate offset, which will be published to elastic if encountered.
+var sysTransactionMap = map[string]byte{
+	"SC_INITIALIZE_TX":   0x00,
+	"SC_BEGIN_EPOCH_TX":  0x01,
+	"SC_BEGIN_TICK_TX":   0x02,
+	"SC_END_TICK_TX":     0x03,
+	"SC_END_EPOCH_TX":    0x04,
+	"SC_NOTIFICATION_TX": 0x05,
+}
 
 type LogEvent struct {
 	Epoch                 uint32         `json:"epoch"`
@@ -23,10 +37,16 @@ type LogEventElastic struct {
 	TickNumber            uint32 `json:"tickNumber"`
 	Timestamp             int64  `json:"timestamp"`
 	EmittingContractIndex uint32 `json:"emittingContractIndex"`
-	TransactionHash       string `json:"transactionHash"`
+	TransactionHash       string `json:"transactionHash,omitempty"`
 	LogId                 uint64 `json:"logId"`
 	LogDigest             string `json:"logDigest"`
-	Type                  uint32 `json:"type"`
+	Type                  int16  `json:"type"`
+	// This value is meant to be included in the message only if the transactionHash starts with one of the strings in
+	// the sysTransactionMap map. In this event, transactionHash should no longer be included.
+	// Important to use a byte pointer here.
+	// This value may be set to 0 as in the event of an 'SC_INITIALIZE_TX', causing it to not be included in the elastic message.
+	// Using a pointer here helps us because it can differentiate between not set (nil) and set with value 0.
+	Category *byte `json:"category,omitempty"`
 
 	//Optional event body fields
 	Source                 string `json:"source,omitempty"`
@@ -46,6 +66,10 @@ type LogEventElastic struct {
 
 func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
 
+	if logEvent.Type > 32767 {
+		return LogEventElastic{}, fmt.Errorf("type value %d exceeds int16 maximum of 32767", logEvent.Type)
+	}
+
 	logEventElastic := LogEventElastic{
 		Epoch:                 logEvent.Epoch,
 		TickNumber:            logEvent.TickNumber,
@@ -54,8 +78,19 @@ func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
 		TransactionHash:       logEvent.TransactionHash,
 		LogId:                 logEvent.LogId,
 		LogDigest:             logEvent.LogDigest,
-		Type:                  logEvent.Type,
+		Type:                  int16(logEvent.Type),
 	}
+
+	txCategory, isSpecialTx, err := isSpecialSystemTransaction(logEventElastic.TransactionHash)
+	if err != nil {
+		return LogEventElastic{}, fmt.Errorf("checking if transactionHash is special: %w", err)
+	}
+	if isSpecialTx {
+		// We want to omit transactionHash field if tx is special, and instead set the category
+		logEventElastic.TransactionHash = ""
+		logEventElastic.Category = &txCategory
+	}
+
 	for key, value := range logEvent.Body {
 		var err error
 		switch key {
@@ -162,4 +197,24 @@ func assignTyped[T any](key string, value any, target *T) error {
 
 	var zero T
 	return fmt.Errorf("wrong data type for '%s'. expected %T, got %T", key, zero, value)
+}
+
+func isSpecialSystemTransaction(transactionHash string) (byte, bool, error) {
+	if !strings.HasPrefix(transactionHash, "SC_") {
+		return 0x00, false, nil
+	}
+
+	// Find the last underscore
+	lastUnderscore := strings.LastIndex(transactionHash, "_")
+	if lastUnderscore == -1 {
+		return 0x00, false, fmt.Errorf("cannot find last '_' character in transaction hash which starts with 'SC_' value: %s", transactionHash)
+	}
+
+	prefix := transactionHash[:lastUnderscore]
+	value, ok := sysTransactionMap[prefix]
+	if !ok {
+		return 0x00, false, fmt.Errorf("unknown special system transaction '%s'", prefix)
+	}
+
+	return value, true, nil
 }

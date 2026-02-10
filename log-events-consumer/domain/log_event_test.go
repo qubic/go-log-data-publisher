@@ -64,6 +64,9 @@ func TestLogEventToElastic_AllFields(t *testing.T) {
 	if result.Type != 1 {
 		t.Errorf("expected Type=1, got %d", result.Type)
 	}
+	if result.Category != nil {
+		t.Errorf("expected Category=nil for regular transaction, got %v", *result.Category)
+	}
 
 	// Verify all body fields
 	if result.Source != "SOURCEADDRESS" {
@@ -141,7 +144,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"destination":           "DESTADDR",
 			},
 			unexpectedKeys: []string{
-				"amount", "assetName", "assetIssuer", "numberOfShares",
+				"category", "amount", "assetName", "assetIssuer", "numberOfShares",
 				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
 				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
 			},
@@ -163,7 +166,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"amount":                float64(5000),
 			},
 			unexpectedKeys: []string{
-				"source", "destination", "assetName", "assetIssuer", "numberOfShares",
+				"category", "source", "destination", "assetName", "assetIssuer", "numberOfShares",
 				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
 				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
 			},
@@ -191,7 +194,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"managingContractIndex": float64(3),
 			},
 			unexpectedKeys: []string{
-				"source", "destination", "amount", "unitOfMeasurement", "numberOfDecimalPlaces",
+				"category", "source", "destination", "amount", "unitOfMeasurement", "numberOfDecimalPlaces",
 				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
 			},
 		},
@@ -209,7 +212,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"type":                  float64(1),
 			},
 			unexpectedKeys: []string{
-				"source", "destination", "amount", "assetName", "assetIssuer", "numberOfShares",
+				"category", "source", "destination", "amount", "assetName", "assetIssuer", "numberOfShares",
 				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
 				"deductedAmount", "remainingAmount", "contractIndex", "contractIndexBurnedFor",
 			},
@@ -237,7 +240,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"remainingAmount":        float64(750),
 			},
 			unexpectedKeys: []string{
-				"source", "destination", "amount", "assetName", "assetIssuer", "numberOfShares",
+				"category", "source", "destination", "amount", "assetName", "assetIssuer", "numberOfShares",
 				"managingContractIndex", "unitOfMeasurement", "numberOfDecimalPlaces",
 			},
 		},
@@ -777,6 +780,345 @@ func TestAssignTyped_JSONFloat64ToUint32(t *testing.T) {
 				}
 				if target != tt.expected {
 					t.Errorf("expected %d, got %d", tt.expected, target)
+				}
+			}
+		})
+	}
+}
+
+func TestLogEventToElastic_SpecialSystemTransactions(t *testing.T) {
+	tests := []struct {
+		name                string
+		transactionHash     string
+		expectedCategory    byte
+		expectedTxHashEmpty bool
+	}{
+		{
+			name:                "SC_INITIALIZE_TX with tick suffix",
+			transactionHash:     "SC_INITIALIZE_TX_12345",
+			expectedCategory:    0x00,
+			expectedTxHashEmpty: true,
+		},
+		{
+			name:                "SC_BEGIN_EPOCH_TX with tick suffix",
+			transactionHash:     "SC_BEGIN_EPOCH_TX_67890",
+			expectedCategory:    0x01,
+			expectedTxHashEmpty: true,
+		},
+		{
+			name:                "SC_BEGIN_TICK_TX with tick suffix",
+			transactionHash:     "SC_BEGIN_TICK_TX_11111",
+			expectedCategory:    0x02,
+			expectedTxHashEmpty: true,
+		},
+		{
+			name:                "SC_END_TICK_TX with tick suffix",
+			transactionHash:     "SC_END_TICK_TX_22222",
+			expectedCategory:    0x03,
+			expectedTxHashEmpty: true,
+		},
+		{
+			name:                "SC_END_EPOCH_TX with tick suffix",
+			transactionHash:     "SC_END_EPOCH_TX_33333",
+			expectedCategory:    0x04,
+			expectedTxHashEmpty: true,
+		},
+		{
+			name:                "SC_NOTIFICATION_TX with tick suffix",
+			transactionHash:     "SC_NOTIFICATION_TX_44444",
+			expectedCategory:    0x05,
+			expectedTxHashEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:                 100,
+				TickNumber:            200,
+				Type:                  1,
+				EmittingContractIndex: 5,
+				LogId:                 400,
+				LogDigest:             "abcd1234",
+				TransactionHash:       tt.transactionHash,
+				Timestamp:             1234567890,
+				Body:                  map[string]any{},
+			}
+
+			result, err := LogEventToElastic(logEvent)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Verify category is set correctly
+			if result.Category == nil {
+				t.Fatalf("expected Category to be set, got nil")
+			}
+			if *result.Category != tt.expectedCategory {
+				t.Errorf("expected Category=%d, got %d", tt.expectedCategory, *result.Category)
+			}
+
+			// Verify transaction hash is cleared
+			if tt.expectedTxHashEmpty && result.TransactionHash != "" {
+				t.Errorf("expected TransactionHash to be empty, got %s", result.TransactionHash)
+			}
+		})
+	}
+}
+
+func TestLogEventToElastic_SpecialTransactionJSON(t *testing.T) {
+	tests := []struct {
+		name             string
+		transactionHash  string
+		expectedCategory byte
+	}{
+		{
+			name:             "SC_INITIALIZE_TX category 0 included in JSON",
+			transactionHash:  "SC_INITIALIZE_TX_12345",
+			expectedCategory: 0x00,
+		},
+		{
+			name:             "SC_END_TICK_TX category 3 included in JSON",
+			transactionHash:  "SC_END_TICK_TX_67890",
+			expectedCategory: 0x03,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:                 100,
+				TickNumber:            200,
+				Type:                  1,
+				EmittingContractIndex: 5,
+				LogId:                 400,
+				LogDigest:             "abcd1234",
+				TransactionHash:       tt.transactionHash,
+				Timestamp:             1234567890,
+				Body:                  map[string]any{},
+			}
+
+			result, err := LogEventToElastic(logEvent)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Serialize to JSON
+			jsonData, err := json.Marshal(result)
+			if err != nil {
+				t.Fatalf("failed to marshal JSON: %v", err)
+			}
+
+			// Deserialize to map for checking
+			var jsonMap map[string]any
+			err = json.Unmarshal(jsonData, &jsonMap)
+			if err != nil {
+				t.Fatalf("failed to unmarshal JSON: %v", err)
+			}
+
+			// Verify category is present in JSON (even if 0)
+			categoryValue, exists := jsonMap["category"]
+			if !exists {
+				t.Errorf("expected 'category' to be present in JSON, but it was missing")
+			} else {
+				// JSON numbers are float64
+				if categoryFloat, ok := categoryValue.(float64); !ok {
+					t.Errorf("expected category to be a number, got %T", categoryValue)
+				} else if byte(categoryFloat) != tt.expectedCategory {
+					t.Errorf("expected category=%d in JSON, got %f", tt.expectedCategory, categoryFloat)
+				}
+			}
+
+			// Verify transactionHash is NOT present in JSON (omitted because empty)
+			if _, exists := jsonMap["transactionHash"]; exists {
+				t.Errorf("expected 'transactionHash' to be omitted from JSON for special transactions, but it was present with value: %v", jsonMap["transactionHash"])
+			}
+		})
+	}
+}
+
+func TestLogEventToElastic_UnknownSpecialTransaction(t *testing.T) {
+	logEvent := LogEvent{
+		Epoch:           100,
+		TickNumber:      200,
+		Type:            1,
+		TransactionHash: "SC_UNKNOWN_TX_12345",
+		Body:            map[string]any{},
+	}
+
+	_, err := LogEventToElastic(logEvent)
+	if err == nil {
+		t.Fatal("expected error for unknown special transaction, got nil")
+	}
+	expectedMsg := "unknown special system transaction 'SC_UNKNOWN_TX'"
+	if !contains(err.Error(), expectedMsg) {
+		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
+func TestLogEventToElastic_MalformedSpecialTransaction(t *testing.T) {
+	tests := []struct {
+		name            string
+		transactionHash string
+		expectedErrMsg  string
+	}{
+		{
+			name:            "SC_ prefix but missing underscore after",
+			transactionHash: "SC_ENDTICK",
+			expectedErrMsg:  "unknown special system transaction 'SC'",
+		},
+		{
+			name:            "SC_ only",
+			transactionHash: "SC_",
+			expectedErrMsg:  "unknown special system transaction 'SC'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:           100,
+				TickNumber:      200,
+				Type:            1,
+				TransactionHash: tt.transactionHash,
+				Body:            map[string]any{},
+			}
+
+			_, err := LogEventToElastic(logEvent)
+			if err == nil {
+				t.Fatal("expected error for malformed special transaction, got nil")
+			}
+			if !contains(err.Error(), tt.expectedErrMsg) {
+				t.Errorf("expected error message to contain '%s', got '%s'", tt.expectedErrMsg, err.Error())
+			}
+		})
+	}
+}
+
+func TestLogEventToElastic_TypeOverflow(t *testing.T) {
+	tests := []struct {
+		name        string
+		typeValue   uint32
+		expectError bool
+	}{
+		{
+			name:        "type within int16 range",
+			typeValue:   32767,
+			expectError: false,
+		},
+		{
+			name:        "type exceeds int16 max",
+			typeValue:   32768,
+			expectError: true,
+		},
+		{
+			name:        "type far exceeds int16 max",
+			typeValue:   65535,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := LogEvent{
+				Epoch:           100,
+				TickNumber:      200,
+				Type:            tt.typeValue,
+				TransactionHash: "hash123",
+				Body:            map[string]any{},
+			}
+
+			_, err := LogEventToElastic(logEvent)
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error for type overflow, got nil")
+				}
+				expectedMsg := "exceeds int16 maximum"
+				if !contains(err.Error(), expectedMsg) {
+					t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestIsSpecialSystemTransaction(t *testing.T) {
+	tests := []struct {
+		name              string
+		transactionHash   string
+		expectedCategory  byte
+		expectedIsSpecial bool
+		expectError       bool
+		errorMsg          string
+	}{
+		{
+			name:              "regular transaction hash",
+			transactionHash:   "abcd1234hash",
+			expectedCategory:  0x00,
+			expectedIsSpecial: false,
+			expectError:       false,
+		},
+		{
+			name:              "SC_END_TICK_TX with suffix",
+			transactionHash:   "SC_END_TICK_TX_12345",
+			expectedCategory:  0x03,
+			expectedIsSpecial: true,
+			expectError:       false,
+		},
+		{
+			name:              "SC_INITIALIZE_TX with suffix",
+			transactionHash:   "SC_INITIALIZE_TX_67890",
+			expectedCategory:  0x00,
+			expectedIsSpecial: true,
+			expectError:       false,
+		},
+		{
+			name:             "unknown SC_ transaction",
+			transactionHash:  "SC_INVALID_TX_12345",
+			expectedCategory: 0x00,
+			expectError:      true,
+			errorMsg:         "unknown special system transaction 'SC_INVALID_TX'",
+		},
+		{
+			name:             "SC_ with no underscore after prefix",
+			transactionHash:  "SC_ENDTICK",
+			expectedCategory: 0x00,
+			expectError:      true,
+			errorMsg:         "unknown special system transaction 'SC'",
+		},
+		{
+			name:             "SC_ only",
+			transactionHash:  "SC_",
+			expectedCategory: 0x00,
+			expectError:      true,
+			errorMsg:         "unknown special system transaction 'SC'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			category, isSpecial, err := isSpecialSystemTransaction(tt.transactionHash)
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if isSpecial != tt.expectedIsSpecial {
+					t.Errorf("expected isSpecial=%v, got %v", tt.expectedIsSpecial, isSpecial)
+				}
+				if tt.expectedIsSpecial && category != tt.expectedCategory {
+					t.Errorf("expected category=%d, got %d", tt.expectedCategory, category)
 				}
 			}
 		})
