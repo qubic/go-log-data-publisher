@@ -42,7 +42,9 @@ func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, metrics *
 }
 
 func (c *Consumer) Consume(ctx context.Context) error {
-	for {
+	ticker := time.Tick(100 * time.Millisecond)
+	for range ticker {
+
 		select {
 		case <-ctx.Done():
 			log.Println("Shutdown signal received, stopping consumer.")
@@ -54,14 +56,15 @@ func (c *Consumer) Consume(ctx context.Context) error {
 				return fmt.Errorf("consuming batch: %w", err)
 			}
 			log.Printf("Processed [%d] records. Tick: [%d]", count, c.currentTick)
-			time.Sleep(100 * time.Millisecond)
+
 		}
 	}
+	return nil
 }
 
 func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 	defer c.kafkaClient.AllowRebalance()
-	fetches := c.kafkaClient.PollRecords(ctx, 10000)
+	fetches := c.kafkaClient.PollRecords(ctx, 1000)
 	if errors := fetches.Errors(); len(errors) > 0 {
 		for _, err := range errors {
 			log.Printf("Fetches error: %v", err)
@@ -81,10 +84,16 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			return -1, fmt.Errorf("unmarshalling log event [value=%s]: %w", string(record.Value), err)
 		}
 
+		// TODO validate log event (error)
+
 		logEventElastic, err := domain.LogEventToElastic(logEvent)
 		if err != nil {
 			return -1, fmt.Errorf("converting log event from kafka to elastic format [value=%s]: %w", string(record.Value), err)
 		}
+
+		// TODO validate converted events (error)
+
+		// TODO filter unwanted events
 
 		// Skip sending to elastic log events which are regular QU transfers with no amount.
 		if logEventElastic.Type == 0 && logEventElastic.ContractIndex == 0 && logEventElastic.Amount == 0 {
@@ -129,7 +138,6 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 }
 
 func unmarshallLogEvent(record *kgo.Record, logEvent *domain.LogEvent) error {
-
 	err := json.Unmarshal(record.Value, &logEvent)
 	if err != nil {
 		return fmt.Errorf("unmarshalling kafka record: %w", err)

@@ -25,9 +25,12 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		fmt.Printf("main: exited with error: %s\n", err)
+	err := run()
+	if err != nil {
+		log.Printf("main: exited with error: %s", err)
+		os.Exit(1)
 	}
+	log.Printf("main: exited successfully.")
 }
 
 const configPrefix = "QUBIC_LOG_EVENTS_CONSUMER"
@@ -67,7 +70,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("generating config for output: %w", err)
 	}
-	log.Printf("main: Config :\n%v\n", out)
+	log.Printf("main: Config :\n%v", out)
 
 	m := kprom.NewMetrics(cfg.Metrics.Namespace,
 		kprom.Registerer(prometheus.DefaultRegisterer),
@@ -147,12 +150,15 @@ func run() error {
 
 		case err := <-procError:
 			shutdownHTTPServer(srv)
-			return fmt.Errorf("[ERROR] processing error: %w", err)
+			if err != nil {
+				return fmt.Errorf("processing error: %w", err)
+			}
+			return nil
 
 		case err := <-serverError:
 			consumerCtxCancel() // Cancel context to stop consumer
 			<-procError         // Wait for consumer to stop
-			return fmt.Errorf("[ERROR] starting server: %w", err)
+			return fmt.Errorf("server stopped: %w", err)
 		}
 	}
 
