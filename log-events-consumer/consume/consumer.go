@@ -55,8 +55,9 @@ func (c *Consumer) Consume(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("consuming batch: %w", err)
 			}
-			log.Printf("Processed [%d] records. Tick: [%d]", count, c.currentTick)
-
+			if count > 0 {
+				log.Printf("Processed [%d] records. Tick: [%d]", count, c.currentTick)
+			}
 		}
 	}
 	return nil
