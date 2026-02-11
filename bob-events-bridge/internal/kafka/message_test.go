@@ -146,6 +146,18 @@ func TestParseBobTimestamp_RFC3339Fallback(t *testing.T) {
 	assert.Equal(t, int64(1718461800), ts)
 }
 
+func TestParseBobTimestamp_ZeroTimestamp(t *testing.T) {
+	ts, err := ParseBobTimestamp("00-00-00 00:00:00")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), ts)
+}
+
+func TestParseBobTimestamp_EmptyString(t *testing.T) {
+	ts, err := ParseBobTimestamp("")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), ts)
+}
+
 func TestParseBobTimestamp_Invalid(t *testing.T) {
 	_, err := ParseBobTimestamp("not-a-timestamp")
 	require.Error(t, err)
