@@ -34,7 +34,7 @@ func TestLogEventToElastic_AllFields(t *testing.T) {
 		},
 	}
 
-	result, err := LogEventToElastic(logEvent)
+	result, err := logEvent.ToLogEventElastic()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				Body:                  tt.body,
 			}
 
-			result, err := LogEventToElastic(logEvent)
+			result, err := logEvent.ToLogEventElastic()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -311,7 +311,7 @@ func TestLogEventToElastic_NegativeAmountError(t *testing.T) {
 		},
 	}
 
-	_, err := LogEventToElastic(logEvent)
+	_, err := logEvent.ToLogEventElastic()
 	if err == nil {
 		t.Fatal("expected error for negative amount, got nil")
 	}
@@ -330,7 +330,7 @@ func TestLogEventToElastic_NegativeNumberOfSharesError(t *testing.T) {
 		},
 	}
 
-	_, err := LogEventToElastic(logEvent)
+	_, err := logEvent.ToLogEventElastic()
 	if err == nil {
 		t.Fatal("expected error for negative numberOfShares, got nil")
 	}
@@ -349,7 +349,7 @@ func TestLogEventToElastic_NegativeManagingContractIndexError(t *testing.T) {
 		},
 	}
 
-	_, err := LogEventToElastic(logEvent)
+	_, err := logEvent.ToLogEventElastic()
 	if err == nil {
 		t.Fatal("expected error for negative managingContractIndex, got nil")
 	}
@@ -401,7 +401,7 @@ func TestLogEventToElastic_UnitOfMeasurementValidation(t *testing.T) {
 				},
 			}
 
-			_, err := LogEventToElastic(logEvent)
+			_, err := logEvent.ToLogEventElastic()
 			if tt.expectError {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -476,7 +476,7 @@ func TestLogEventToElastic_NumberOfDecimalPlacesValidation(t *testing.T) {
 				},
 			}
 
-			_, err := LogEventToElastic(logEvent)
+			_, err := logEvent.ToLogEventElastic()
 			if tt.expectError {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -502,7 +502,7 @@ func TestLogEventToElastic_UnknownBodyKey(t *testing.T) {
 		},
 	}
 
-	_, err := LogEventToElastic(logEvent)
+	_, err := logEvent.ToLogEventElastic()
 	if err == nil {
 		t.Fatal("expected error for unknown body key, got nil")
 	}
@@ -561,7 +561,7 @@ func TestLogEventToElastic_WrongDataType(t *testing.T) {
 				},
 			}
 
-			_, err := LogEventToElastic(logEvent)
+			_, err := logEvent.ToLogEventElastic()
 			if err == nil {
 				t.Fatalf("expected error for wrong data type, got nil")
 			}
@@ -845,7 +845,7 @@ func TestLogEventToElastic_SpecialSystemTransactions(t *testing.T) {
 				Body:                  map[string]any{},
 			}
 
-			result, err := LogEventToElastic(logEvent)
+			result, err := logEvent.ToLogEventElastic()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -898,7 +898,7 @@ func TestLogEventToElastic_SpecialTransactionJSON(t *testing.T) {
 				Body:                  map[string]any{},
 			}
 
-			result, err := LogEventToElastic(logEvent)
+			result, err := logEvent.ToLogEventElastic()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -946,7 +946,7 @@ func TestLogEventToElastic_UnknownSpecialTransaction(t *testing.T) {
 		Body:            map[string]any{},
 	}
 
-	_, err := LogEventToElastic(logEvent)
+	_, err := logEvent.ToLogEventElastic()
 	if err == nil {
 		t.Fatal("expected error for unknown special transaction, got nil")
 	}
@@ -984,7 +984,7 @@ func TestLogEventToElastic_MalformedSpecialTransaction(t *testing.T) {
 				Body:            map[string]any{},
 			}
 
-			_, err := LogEventToElastic(logEvent)
+			_, err := logEvent.ToLogEventElastic()
 			if err == nil {
 				t.Fatal("expected error for malformed special transaction, got nil")
 			}
@@ -1028,7 +1028,7 @@ func TestLogEventToElastic_TypeOverflow(t *testing.T) {
 				Body:            map[string]any{},
 			}
 
-			_, err := LogEventToElastic(logEvent)
+			_, err := logEvent.ToLogEventElastic()
 			if tt.expectError {
 				if err == nil {
 					t.Fatal("expected error for type overflow, got nil")

@@ -32,53 +32,97 @@ type LogEvent struct {
 	Body                  map[string]any `json:"body"`
 }
 
-type LogEventElastic struct {
-	Epoch                 uint32 `json:"epoch"`
-	TickNumber            uint32 `json:"tickNumber"`
-	Timestamp             int64  `json:"timestamp"`
-	EmittingContractIndex uint32 `json:"emittingContractIndex"`
-	TransactionHash       string `json:"transactionHash,omitempty"`
-	LogId                 uint64 `json:"logId"`
-	LogDigest             string `json:"logDigest"`
-	Type                  int16  `json:"type"`
-	// This value is meant to be included in the message only if the transactionHash starts with one of the strings in
-	// the sysTransactionMap map. In this event, transactionHash should no longer be included.
-	// Important to use a byte pointer here.
-	// This value may be set to 0 as in the event of an 'SC_INITIALIZE_TX', causing it to not be included in the elastic message.
-	// Using a pointer here helps us because it can differentiate between not set (nil) and set with value 0.
-	Category *byte `json:"category,omitempty"`
-
-	//Optional event body fields
-	Source                 string `json:"source,omitempty"`
-	Destination            string `json:"destination,omitempty"`
-	Amount                 int64  `json:"amount,omitempty"`
-	AssetName              string `json:"assetName,omitempty"`
-	AssetIssuer            string `json:"assetIssuer,omitempty"`
-	NumberOfShares         int64  `json:"numberOfShares,omitempty"`
-	ManagingContractIndex  int64  `json:"managingContractIndex,omitempty"`
-	UnitOfMeasurement      []byte `json:"unitOfMeasurement,omitempty"`
-	NumberOfDecimalPlaces  byte   `json:"numberOfDecimalPlaces,omitempty"`
-	DeductedAmount         uint64 `json:"deductedAmount,omitempty"`
-	RemainingAmount        int64  `json:"remainingAmount,omitempty"`
-	ContractIndex          uint32 `json:"contractIndex,omitempty"`
-	ContractIndexBurnedFor uint32 `json:"contractIndexBurnedFor,omitempty"`
+// LogEventPtr mirrors LogEvent but uses pointers for all fields to detect presence during JSON unmarshalling.
+type LogEventPtr struct {
+	Epoch                 *uint32         `json:"epoch"`
+	TickNumber            *uint32         `json:"tickNumber"`
+	Index                 *uint64         `json:"index"`
+	Type                  *uint32         `json:"type"`
+	EmittingContractIndex *uint32         `json:"emittingContractIndex"`
+	LogId                 *uint64         `json:"logId"`
+	LogDigest             *string         `json:"logDigest"`
+	TransactionHash       *string         `json:"transactionHash"`
+	Timestamp             *int64          `json:"timestamp"`
+	BodySize              *uint32         `json:"bodySize"`
+	Body                  *map[string]any `json:"body"`
 }
 
-func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
+// ToLogEvent converts the pointer-based LogEventPtr into a concrete LogEvent.
+// It validates presence (non-nil) of required fields and returns an error if any are missing.
+func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
+	missing := make([]string, 0, 6)
+	if lep.Epoch == nil {
+		missing = append(missing, "epoch")
+	}
+	if lep.TickNumber == nil {
+		missing = append(missing, "tickNumber")
+	}
+	if lep.LogId == nil {
+		missing = append(missing, "logId")
+	}
+	if lep.Timestamp == nil {
+		missing = append(missing, "timestamp")
+	}
+	if lep.LogDigest == nil {
+		missing = append(missing, "logDigest")
+	}
+	if lep.Index == nil {
+		missing = append(missing, "index")
+	}
+	if lep.Type == nil {
+		missing = append(missing, "type")
+	}
+	if lep.EmittingContractIndex == nil {
+		missing = append(missing, "emittingContractIndex")
+	}
+	if len(missing) > 0 {
+		return LogEvent{}, fmt.Errorf("missing required fields: %v", missing)
+	}
 
-	if logEvent.Type > 32767 {
-		return LogEventElastic{}, fmt.Errorf("type value %d exceeds int16 maximum of 32767", logEvent.Type)
+	// Optional fields: if absent, use zero-values
+	var hash string
+	if lep.TransactionHash != nil {
+		hash = *lep.TransactionHash
+	}
+	var bodySize uint32
+	if lep.BodySize != nil {
+		bodySize = *lep.BodySize
+	}
+	var body map[string]any
+	if lep.Body != nil {
+		body = *lep.Body
+	}
+
+	return LogEvent{
+		Epoch:                 *lep.Epoch,
+		TickNumber:            *lep.TickNumber,
+		Index:                 *lep.Index,
+		Type:                  *lep.Type,
+		EmittingContractIndex: *lep.EmittingContractIndex,
+		LogId:                 *lep.LogId,
+		LogDigest:             *lep.LogDigest,
+		TransactionHash:       hash,
+		Timestamp:             *lep.Timestamp,
+		BodySize:              bodySize,
+		Body:                  body,
+	}, nil
+}
+
+func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
+
+	if le.Type > 32767 {
+		return LogEventElastic{}, fmt.Errorf("type value %d exceeds int16 maximum of 32767", le.Type)
 	}
 
 	logEventElastic := LogEventElastic{
-		Epoch:                 logEvent.Epoch,
-		TickNumber:            logEvent.TickNumber,
-		Timestamp:             logEvent.Timestamp,
-		EmittingContractIndex: logEvent.EmittingContractIndex,
-		TransactionHash:       logEvent.TransactionHash,
-		LogId:                 logEvent.LogId,
-		LogDigest:             logEvent.LogDigest,
-		Type:                  int16(logEvent.Type),
+		Epoch:                 le.Epoch,
+		TickNumber:            le.TickNumber,
+		Timestamp:             le.Timestamp,
+		EmittingContractIndex: le.EmittingContractIndex,
+		TransactionHash:       le.TransactionHash,
+		LogId:                 le.LogId,
+		LogDigest:             le.LogDigest,
+		Type:                  int16(le.Type),
 	}
 
 	txCategory, isSpecialTx, err := isSpecialSystemTransaction(logEventElastic.TransactionHash)
@@ -91,7 +135,7 @@ func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
 		logEventElastic.Category = &txCategory
 	}
 
-	for key, value := range logEvent.Body {
+	for key, value := range le.Body {
 		var err error
 		switch key {
 		case "source":
@@ -161,6 +205,38 @@ func LogEventToElastic(logEvent LogEvent) (LogEventElastic, error) {
 		}
 	}
 	return logEventElastic, nil
+}
+
+type LogEventElastic struct {
+	Epoch                 uint32 `json:"epoch"`
+	TickNumber            uint32 `json:"tickNumber"`
+	Timestamp             int64  `json:"timestamp"`
+	EmittingContractIndex uint32 `json:"emittingContractIndex"`
+	TransactionHash       string `json:"transactionHash,omitempty"`
+	LogId                 uint64 `json:"logId"`
+	LogDigest             string `json:"logDigest"`
+	Type                  int16  `json:"type"`
+	// This value is meant to be included in the message only if the transactionHash starts with one of the strings in
+	// the sysTransactionMap map. In this event, transactionHash should no longer be included.
+	// Important to use a byte pointer here.
+	// This value may be set to 0 as in the event of an 'SC_INITIALIZE_TX', causing it to not be included in the elastic message.
+	// Using a pointer here helps us because it can differentiate between not set (nil) and set with value 0.
+	Category *byte `json:"category,omitempty"`
+
+	//Optional event body fields
+	Source                 string `json:"source,omitempty"`
+	Destination            string `json:"destination,omitempty"`
+	Amount                 int64  `json:"amount,omitempty"`
+	AssetName              string `json:"assetName,omitempty"`
+	AssetIssuer            string `json:"assetIssuer,omitempty"`
+	NumberOfShares         int64  `json:"numberOfShares,omitempty"`
+	ManagingContractIndex  int64  `json:"managingContractIndex,omitempty"`
+	UnitOfMeasurement      []byte `json:"unitOfMeasurement,omitempty"`
+	NumberOfDecimalPlaces  byte   `json:"numberOfDecimalPlaces,omitempty"`
+	DeductedAmount         uint64 `json:"deductedAmount,omitempty"`
+	RemainingAmount        int64  `json:"remainingAmount,omitempty"`
+	ContractIndex          uint32 `json:"contractIndex,omitempty"`
+	ContractIndexBurnedFor uint32 `json:"contractIndexBurnedFor,omitempty"`
 }
 
 func assignTyped[T any](key string, value any, target *T) error {

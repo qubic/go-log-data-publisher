@@ -77,18 +77,20 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 	for !iter.Done() {
 		record := iter.Next()
 
-		var logEvent domain.LogEvent
-
-		err := unmarshallLogEvent(record, &logEvent)
+		var raw domain.LogEventPtr
+		err := unmarshallLogEvent(record, &raw)
 		if err != nil {
-			return -1, fmt.Errorf("unmarshalling log event [value=%s]: %w", string(record.Value), err)
+			return -1, fmt.Errorf("unmarshalling raw log event [%s]: %w", string(record.Value), err)
 		}
 
-		// TODO validate log event (error)
-
-		logEventElastic, err := domain.LogEventToElastic(logEvent)
+		logEvent, err := raw.ToLogEvent()
 		if err != nil {
-			return -1, fmt.Errorf("converting log event from kafka to elastic format [value=%s]: %w", string(record.Value), err)
+			return -1, fmt.Errorf("validating and converting to log event: %w", err)
+		}
+
+		logEventElastic, err := logEvent.ToLogEventElastic()
+		if err != nil {
+			return -1, fmt.Errorf("converting log event to elastic format [%s]: %w", string(record.Value), err)
 		}
 
 		// TODO validate converted events (error)
@@ -137,8 +139,8 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 	return len(documents), nil
 }
 
-func unmarshallLogEvent(record *kgo.Record, logEvent *domain.LogEvent) error {
-	err := json.Unmarshal(record.Value, &logEvent)
+func unmarshallLogEvent(record *kgo.Record, target any) error {
+	err := json.Unmarshal(record.Value, target)
 	if err != nil {
 		return fmt.Errorf("unmarshalling kafka record: %w", err)
 	}
