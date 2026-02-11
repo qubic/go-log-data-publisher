@@ -33,6 +33,7 @@ type Event struct {
 	Timestamp     string                 `protobuf:"bytes,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	Body          *structpb.Struct       `protobuf:"bytes,7,opt,name=body,proto3" json:"body,omitempty"`
 	IndexInTick   uint32                 `protobuf:"varint,8,opt,name=index_in_tick,json=indexInTick,proto3" json:"index_in_tick,omitempty"`
+	LogDigest     string                 `protobuf:"bytes,9,opt,name=log_digest,json=logDigest,proto3" json:"log_digest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,6 +122,13 @@ func (x *Event) GetIndexInTick() uint32 {
 		return x.IndexInTick
 	}
 	return 0
+}
+
+func (x *Event) GetLogDigest() string {
+	if x != nil {
+		return x.LogDigest
+	}
+	return ""
 }
 
 // TickInterval represents a range of ticks
@@ -416,7 +424,7 @@ var File_messages_proto protoreflect.FileDescriptor
 
 const file_messages_proto_rawDesc = "" +
 	"\n" +
-	"\x0emessages.proto\x12\x10events_bridge.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xef\x01\n" +
+	"\x0emessages.proto\x12\x10events_bridge.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x8e\x02\n" +
 	"\x05Event\x12\x15\n" +
 	"\x06log_id\x18\x01 \x01(\x04R\x05logId\x12\x12\n" +
 	"\x04tick\x18\x02 \x01(\rR\x04tick\x12\x14\n" +
@@ -426,7 +434,9 @@ const file_messages_proto_rawDesc = "" +
 	"\atx_hash\x18\x05 \x01(\tR\x06txHash\x12\x1c\n" +
 	"\ttimestamp\x18\x06 \x01(\tR\ttimestamp\x12+\n" +
 	"\x04body\x18\a \x01(\v2\x17.google.protobuf.StructR\x04body\x12\"\n" +
-	"\rindex_in_tick\x18\b \x01(\rR\vindexInTick\"J\n" +
+	"\rindex_in_tick\x18\b \x01(\rR\vindexInTick\x12\x1d\n" +
+	"\n" +
+	"log_digest\x18\t \x01(\tR\tlogDigest\"J\n" +
 	"\fTickInterval\x12\x1d\n" +
 	"\n" +
 	"first_tick\x18\x01 \x01(\rR\tfirstTick\x12\x1b\n" +
