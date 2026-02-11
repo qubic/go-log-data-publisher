@@ -95,6 +95,7 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	require.Equal(t, uint32(22000001), resp.Events[0].Tick)
 	require.Equal(t, uint32(145), resp.Events[0].Epoch)
 	require.Equal(t, uint32(0), resp.Events[0].IndexInTick)
+	require.Equal(t, "test-digest", resp.Events[0].LogDigest)
 }
 
 // TestE2E_MultipleEventsPerTick tests multiple events for the same tick
@@ -152,6 +153,7 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	for _, event := range resp.Events {
 		logIDs[event.LogId] = true
 		indexValues[event.IndexInTick] = true
+		require.Equal(t, "test-digest", event.LogDigest)
 	}
 	for i := uint64(1); i <= 5; i++ {
 		require.True(t, logIDs[i], "Missing event with logID %d", i)
@@ -503,6 +505,7 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", bodyFields["from"].GetStringValue())
 	require.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", bodyFields["to"].GetStringValue())
 	require.Equal(t, float64(1000000), bodyFields["amount"].GetNumberValue())
+	require.Equal(t, "test-digest", event.LogDigest)
 }
 
 // TestE2E_NonOKLogsSkipped tests that logs with ok=false are not stored

@@ -19,6 +19,7 @@ func createTestEvent(epoch, tick uint32, logID uint64) *eventsbridge.Event {
 		LogId:     logID,
 		EventType: 0, // qu_transfer
 		TxHash:    fmt.Sprintf("hash_%d_%d", tick, logID),
+		LogDigest: fmt.Sprintf("digest_%d_%d", tick, logID),
 		Timestamp: "2024-01-01T00:00:00Z",
 		Body:      nil,
 	}
@@ -347,6 +348,7 @@ func TestMultipleEventsPerTick(t *testing.T) {
 		logIDs[event.LogId] = true
 		require.Equal(t, tick, event.Tick)
 		require.Equal(t, uint32(1), event.Epoch)
+		require.Equal(t, fmt.Sprintf("digest_%d_%d", tick, event.LogId), event.LogDigest)
 	}
 
 	// Verify all log IDs are present

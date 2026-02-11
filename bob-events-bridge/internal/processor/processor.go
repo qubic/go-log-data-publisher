@@ -439,6 +439,7 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 		Timestamp:   payload.Timestamp,
 		Body:        bodyStruct,
 		IndexInTick: p.tickEventIndex,
+		LogDigest:   payload.LogDigest,
 	}
 
 	// Initialize batch if nil

@@ -16,6 +16,7 @@ message Event {
     string timestamp = 6;
     google.protobuf.Struct body = 7;
     uint32 index_in_tick = 8;
+    string log_digest = 9;
 }
 
 // TickInterval represents a range of ticks
