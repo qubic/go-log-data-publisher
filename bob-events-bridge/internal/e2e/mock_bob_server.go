@@ -17,6 +17,7 @@ type MockBobServer struct {
 	server              *httptest.Server
 	currentEpoch        uint16
 	currentVerifiedTick uint32
+	initialTick         uint32
 	upgrader            websocket.Upgrader
 
 	mu             sync.Mutex
@@ -31,6 +32,7 @@ func NewMockBobServer(epoch uint16, verifiedTick uint32) *MockBobServer {
 	m := &MockBobServer{
 		currentEpoch:        epoch,
 		currentVerifiedTick: verifiedTick,
+		initialTick:         verifiedTick, // Default initialTick to verifiedTick
 		subscriptionCh:      make(chan bob.SubscribeRequest, 10),
 		messagesToSend:      make(chan []byte, 100),
 		upgrader: websocket.Upgrader{
@@ -38,13 +40,21 @@ func NewMockBobServer(epoch uint16, verifiedTick uint32) *MockBobServer {
 		},
 	}
 
-	m.server = httptest.NewServer(http.HandlerFunc(m.handleWS))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws/logs", m.handleWS)
+	mux.HandleFunc("/status", m.handleStatus)
+	m.server = httptest.NewServer(mux)
 	return m
 }
 
 // URL returns the WebSocket URL of the mock server
 func (m *MockBobServer) URL() string {
 	return "ws" + strings.TrimPrefix(m.server.URL, "http") + "/ws/logs"
+}
+
+// StatusURL returns the HTTP status URL of the mock server
+func (m *MockBobServer) StatusURL() string {
+	return m.server.URL + "/status"
 }
 
 // Close shuts down the mock server
@@ -56,6 +66,23 @@ func (m *MockBobServer) Close() {
 	}
 	m.mu.Unlock()
 	m.server.Close()
+}
+
+// handleStatus handles the /status HTTP endpoint
+func (m *MockBobServer) handleStatus(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	status := bob.StatusResponse{
+		CurrentProcessingEpoch:   m.currentEpoch,
+		CurrentFetchingTick:      m.currentVerifiedTick,
+		CurrentFetchingLogTick:   m.currentVerifiedTick,
+		CurrentVerifyLoggingTick: m.currentVerifiedTick,
+		CurrentIndexingTick:      m.currentVerifiedTick,
+		InitialTick:              m.initialTick,
+	}
+	m.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 // handleWS handles incoming WebSocket connections
@@ -153,9 +180,17 @@ func (m *MockBobServer) writeLoop(conn *websocket.Conn) {
 	for msg := range m.messagesToSend {
 		m.mu.Lock()
 		closed := m.closed
+		currentConn := m.conn
 		m.mu.Unlock()
 
 		if closed {
+			return
+		}
+
+		// If this writeLoop's connection is no longer the active one,
+		// re-queue the message for the new connection's writeLoop and exit.
+		if currentConn != conn {
+			m.messagesToSend <- msg
 			return
 		}
 
@@ -238,5 +273,12 @@ func (m *MockBobServer) UpdateEpoch(epoch uint16) {
 func (m *MockBobServer) UpdateVerifiedTick(tick uint32) {
 	m.mu.Lock()
 	m.currentVerifiedTick = tick
+	m.mu.Unlock()
+}
+
+// UpdateInitialTick updates the initial tick returned by the status endpoint
+func (m *MockBobServer) UpdateInitialTick(tick uint32) {
+	m.mu.Lock()
+	m.initialTick = tick
 	m.mu.Unlock()
 }

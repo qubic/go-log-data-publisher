@@ -2,15 +2,18 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	eventsbridge "github.com/qubic/bob-events-bridge/api/events-bridge/v1"
 	"github.com/qubic/bob-events-bridge/internal/config"
 	"github.com/qubic/bob-events-bridge/internal/grpc"
+	"github.com/qubic/bob-events-bridge/internal/kafka"
 	"github.com/qubic/bob-events-bridge/internal/processor"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 )
@@ -48,9 +51,9 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	require.NoError(t, err, "Failed to create storage manager")
 
 	// 3. Create processor
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	// 4. Start processor
 	ctx, cancel := context.WithCancel(context.Background())
@@ -67,7 +70,11 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	require.NoError(t, err, "Timeout waiting for subscription")
 
 	// 6. Send event
-	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{"amount": 1000})
+	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 1000,
+	})
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err, "Failed to send log message")
 
@@ -87,6 +94,7 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	require.Equal(t, uint64(1), resp.Events[0].LogId)
 	require.Equal(t, uint32(22000001), resp.Events[0].Tick)
 	require.Equal(t, uint32(145), resp.Events[0].Epoch)
+	require.Equal(t, uint32(0), resp.Events[0].IndexInTick)
 }
 
 // TestE2E_MultipleEventsPerTick tests multiple events for the same tick
@@ -98,9 +106,9 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -116,7 +124,11 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	// Send 5 events for the same tick
 	tick := uint32(22000001)
 	for i := uint64(1); i <= 5; i++ {
-		payload := CreateLogPayload(145, tick, i, 0, map[string]any{"index": i})
+		payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
 		err = mockBob.SendLogMessage(payload, 0, 0, false)
 		require.NoError(t, err)
 	}
@@ -134,13 +146,18 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Events, 5)
 
-	// Verify all log IDs are present
+	// Verify all log IDs are present and IndexInTick values are 0-4
 	logIDs := make(map[uint64]bool)
+	indexValues := make(map[uint32]bool)
 	for _, event := range resp.Events {
 		logIDs[event.LogId] = true
+		indexValues[event.IndexInTick] = true
 	}
 	for i := uint64(1); i <= 5; i++ {
 		require.True(t, logIDs[i], "Missing event with logID %d", i)
+	}
+	for i := uint32(0); i < 5; i++ {
+		require.True(t, indexValues[i], "Missing IndexInTick value %d", i)
 	}
 }
 
@@ -153,9 +170,9 @@ func TestE2E_EpochTransition(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -216,9 +233,9 @@ func TestE2E_Deduplication(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -232,9 +249,16 @@ func TestE2E_Deduplication(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send the same event twice
-	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{"test": "data"})
+	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 500,
+	})
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
+
+	// Flush the batch so the first event is stored
+	mockBob.SendCatchUpComplete(0, 1, 1)
 
 	// Wait for first event
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -265,9 +289,9 @@ func TestE2E_StatePersistence(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -313,9 +337,9 @@ func TestE2E_CrashRecovery(t *testing.T) {
 		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 		require.NoError(t, err)
 
-		cfg := CreateTestConfig(mockBob.URL(), tempDir)
+		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -345,9 +369,9 @@ func TestE2E_CrashRecovery(t *testing.T) {
 	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg2 := CreateTestConfig(mockBob2.URL(), tempDir)
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop())
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)
@@ -378,9 +402,9 @@ func TestE2E_GetStatus(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -433,9 +457,9 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -448,21 +472,14 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send event with complex body
-	complexBody := map[string]any{
-		"sourceId":     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"destId":       "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-		"amount":       1000000,
-		"inputType":    0,
-		"inputSize":    32,
-		"extraData":    "test string",
-		"nestedObject": map[string]any{"key1": "value1", "key2": 123},
-		"arrayField":   []any{"a", "b", "c"},
-		"boolField":    true,
-		"floatField":   3.14159,
+	// Send event with a valid qu_transfer body
+	transferBody := map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 1000000,
 	}
 
-	payload := CreateLogPayload(145, 22000001, 1, 0, complexBody)
+	payload := CreateLogPayload(145, 22000001, 1, 0, transferBody)
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 	mockBob.SendCatchUpComplete(0, 1, 1)
@@ -483,11 +500,9 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	require.NotNil(t, event.GetBody())
 
 	bodyFields := event.GetBody().GetFields()
-	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", bodyFields["sourceId"].GetStringValue())
+	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", bodyFields["from"].GetStringValue())
+	require.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", bodyFields["to"].GetStringValue())
 	require.Equal(t, float64(1000000), bodyFields["amount"].GetNumberValue())
-	require.Equal(t, true, bodyFields["boolField"].GetBoolValue())
-	require.NotNil(t, bodyFields["nestedObject"].GetStructValue())
-	require.Len(t, bodyFields["arrayField"].GetListValue().GetValues(), 3)
 }
 
 // TestE2E_NonOKLogsSkipped tests that logs with ok=false are not stored
@@ -499,9 +514,9 @@ func TestE2E_NonOKLogsSkipped(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -554,14 +569,14 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
 	require.NoError(t, err)
 
-	cfg := CreateTestConfig(mockBob.URL(), tempDir)
+	cfg := CreateTestConfig(mockBob, tempDir)
 	// Subscribe to multiple log types
 	subs := []config.SubscriptionEntry{
 		{SCIndex: 0, LogType: 0}, // qu_transfer
 		{SCIndex: 0, LogType: 1}, // asset_issuance
 		{SCIndex: 0, LogType: 2}, // asset_ownership_change
 	}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop())
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -611,4 +626,678 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 	require.True(t, eventTypes[0], "qu_transfer event should be stored")
 	require.True(t, eventTypes[1], "asset_issuance event should be stored")
 	require.True(t, eventTypes[2], "asset_ownership_change event should be stored")
+}
+
+// TestE2E_IndexInTickResetsAcrossTicks tests that IndexInTick resets when tick changes
+func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	cfg := CreateTestConfig(mockBob, tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Send 2 events for tick A
+	tickA := uint32(22000001)
+	for i := uint64(1); i <= 2; i++ {
+		payload := CreateLogPayload(145, tickA, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
+		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	// Send 3 events for tick B
+	tickB := uint32(22000002)
+	for i := uint64(3); i <= 5; i++ {
+		payload := CreateLogPayload(145, tickB, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
+		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	mockBob.SendCatchUpComplete(0, 5, 5)
+
+	// Wait for all events
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		_, eventsA, _ := storageMgr.GetEventsForTick(tickA)
+		_, eventsB, _ := storageMgr.GetEventsForTick(tickB)
+		return len(eventsA) >= 2 && len(eventsB) >= 3
+	}, "all events should be stored")
+
+	// Verify tick A indices are 0,1
+	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
+	respA, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tickA})
+	require.NoError(t, err)
+	require.Len(t, respA.Events, 2)
+	indicesA := make(map[uint32]bool)
+	for _, event := range respA.Events {
+		indicesA[event.IndexInTick] = true
+	}
+	require.True(t, indicesA[0], "Expected IndexInTick 0 for tick A")
+	require.True(t, indicesA[1], "Expected IndexInTick 1 for tick A")
+
+	// Verify tick B indices are 0,1,2 (reset from tick A)
+	respB, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tickB})
+	require.NoError(t, err)
+	require.Len(t, respB.Events, 3)
+	indicesB := make(map[uint32]bool)
+	for _, event := range respB.Events {
+		indicesB[event.IndexInTick] = true
+	}
+	require.True(t, indicesB[0], "Expected IndexInTick 0 for tick B")
+	require.True(t, indicesB[1], "Expected IndexInTick 1 for tick B")
+	require.True(t, indicesB[2], "Expected IndexInTick 2 for tick B")
+}
+
+// TestE2E_CrashRecoveryIndexInTick tests that IndexInTick is correctly recovered after crash
+func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
+	tempDir := t.TempDir()
+	tick := uint32(22000050)
+
+	// Phase 1: Process 2 events and stop
+	func() {
+		mockBob := NewMockBobServer(145, 22000000)
+		defer mockBob.Close()
+
+		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		require.NoError(t, err)
+
+		cfg := CreateTestConfig(mockBob, tempDir)
+		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := startProcessor(ctx, proc)
+
+		_, err = mockBob.WaitForSubscription(5 * time.Second)
+		require.NoError(t, err)
+
+		// Send 2 events
+		for i := uint64(1); i <= 2; i++ {
+			payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+				"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+				"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+				"amount": i,
+			})
+			err = mockBob.SendLogMessage(payload, 0, 0, false)
+			require.NoError(t, err)
+		}
+		mockBob.SendCatchUpComplete(0, 2, 2)
+
+		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+			_, events, _ := storageMgr.GetEventsForTick(tick)
+			return len(events) >= 2
+		}, "2 events should be stored")
+
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	// Phase 2: Restart, send 2 duplicates + 1 new event, verify new event gets index 2
+	mockBob2 := NewMockBobServer(145, 22000000)
+	defer mockBob2.Close()
+
+	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc2)
+
+	defer func() {
+		stopProcessor(cancel, proc2, done)
+		_ = storageMgr2.Close()
+	}()
+
+	_, err = mockBob2.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Resend the 2 duplicate events (should be deduplicated)
+	for i := uint64(1); i <= 2; i++ {
+		payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		})
+		err = mockBob2.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	// Send 1 new event for the same tick
+	newPayload := CreateLogPayload(145, tick, 3, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 3,
+	})
+	err = mockBob2.SendLogMessage(newPayload, 0, 0, false)
+	require.NoError(t, err)
+	mockBob2.SendCatchUpComplete(0, 3, 3)
+
+	// Wait for the new event
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		_, events, _ := storageMgr2.GetEventsForTick(tick)
+		return len(events) >= 3
+	}, "3 events should be stored after recovery")
+
+	// Verify the new event has IndexInTick=2
+	service := grpc.NewEventsBridgeService(storageMgr2, zap.NewNop())
+	resp, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tick})
+	require.NoError(t, err)
+	require.Len(t, resp.Events, 3)
+
+	// Find the event with logID=3 (the new one) and check its index
+	for _, event := range resp.Events {
+		if event.LogId == 3 {
+			require.Equal(t, uint32(2), event.IndexInTick, "New event after crash recovery should have IndexInTick=2")
+		}
+	}
+}
+
+// TestE2E_KafkaPublishing tests that events are published to Kafka with correct field mapping
+func TestE2E_KafkaPublishing(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	mockKafka := kafka.NewMockPublisher()
+	cfg := CreateTestConfig(mockBob, tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Send a qu_transfer event
+	payload := CreateLogPayloadWithTimestamp(145, 22000001, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 1000,
+	}, "2024-06-15 14:30:00")
+	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	require.NoError(t, err)
+	mockBob.SendCatchUpComplete(0, 1, 1)
+
+	// Wait for storage (implies Kafka was published first)
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		exists, _ := storageMgr.HasEvent(145, 22000001, 1)
+		return exists
+	}, "event should be stored")
+
+	// Verify Kafka message
+	msgs := mockKafka.Messages()
+	require.Len(t, msgs, 1)
+
+	msg := msgs[0]
+	assert.Equal(t, uint64(0), msg.Index)
+	assert.Equal(t, uint32(0), msg.EmittingContractIndex)
+	assert.Equal(t, uint32(0), msg.Type)
+	assert.Equal(t, uint32(22000001), msg.TickNumber)
+	assert.Equal(t, uint32(145), msg.Epoch)
+	assert.Equal(t, "test-digest", msg.LogDigest)
+	assert.Equal(t, uint64(1), msg.LogID)
+	assert.Equal(t, int64(1718461800), msg.Timestamp)
+	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msg.TransactionHash)
+
+	// Verify body transformation (from→source, to→destination)
+	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msg.Body["source"])
+	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", msg.Body["destination"])
+	assert.Equal(t, int64(1000), msg.Body["amount"])
+}
+
+// TestE2E_KafkaBodyTransformations tests body transformations for all event types
+func TestE2E_KafkaBodyTransformations(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	mockKafka := kafka.NewMockPublisher()
+	cfg := CreateTestConfig(mockBob, tempDir)
+	subs := []config.SubscriptionEntry{
+		{SCIndex: 0, LogType: 0},
+		{SCIndex: 0, LogType: 1},
+		{SCIndex: 0, LogType: 2},
+		{SCIndex: 0, LogType: 3},
+		{SCIndex: 0, LogType: 8},
+		{SCIndex: 0, LogType: 13},
+	}
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	for i := 0; i < len(subs); i++ {
+		_, err = mockBob.WaitForSubscription(5 * time.Second)
+		require.NoError(t, err)
+	}
+
+	tick := uint32(22000001)
+
+	// Type 0: qu_transfer
+	p0 := CreateLogPayloadWithTimestamp(145, tick, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 500,
+	}, "2024-06-15 14:30:00")
+	require.NoError(t, mockBob.SendLogMessage(p0, 0, 0, false))
+
+	// Type 1: asset_issuance
+	p1 := CreateLogPayloadWithTimestamp(145, tick, 2, 1, map[string]any{
+		"issuerPublicKey":       "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"numberOfShares":        100000,
+		"managingContractIndex": 5,
+		"name":                  "QX",
+		"numberOfDecimalPlaces": 0,
+		"unitOfMeasurement":     "shares",
+	}, "2024-06-15 14:30:00")
+	require.NoError(t, mockBob.SendLogMessage(p1, 0, 1, false))
+
+	// Type 2: asset_ownership_change
+	p2 := CreateLogPayloadWithTimestamp(145, tick, 3, 2, map[string]any{
+		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetName":            "QX",
+		"numberOfShares":       200,
+	}, "2024-06-15 14:30:00")
+	require.NoError(t, mockBob.SendLogMessage(p2, 0, 2, false))
+
+	// Type 3: asset_possession_change
+	p3 := CreateLogPayloadWithTimestamp(145, tick, 4, 3, map[string]any{
+		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetName":            "CFB",
+		"numberOfShares":       300,
+	}, "2024-06-15 14:30:00")
+	require.NoError(t, mockBob.SendLogMessage(p3, 0, 3, false))
+
+	// Type 8: burning
+	p8 := CreateLogPayloadWithTimestamp(145, tick, 5, 8, map[string]any{
+		"publicKey":              "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"amount":                 999,
+		"contractIndexBurnedFor": 7,
+	}, "2024-06-15 14:30:00")
+	require.NoError(t, mockBob.SendLogMessage(p8, 0, 8, false))
+
+	// Type 13: contract_reserve_deduction
+	p13 := CreateLogPayloadWithTimestamp(145, tick, 6, 13, map[string]any{
+		"deductedAmount":  5000,
+		"remainingAmount": 95000,
+		"contractIndex":   3,
+	}, "2024-06-15 14:30:00")
+	require.NoError(t, mockBob.SendLogMessage(p13, 0, 13, false))
+
+	mockBob.SendCatchUpComplete(0, 6, 6)
+
+	// Wait for all events to be stored
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		return len(mockKafka.Messages()) >= 6
+	}, "all 6 kafka messages should be published")
+
+	msgs := mockKafka.Messages()
+	require.Len(t, msgs, 6)
+
+	// Verify type 0 body: from→source, to→destination
+	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[0].Body["source"])
+	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", msgs[0].Body["destination"])
+
+	// Verify type 1 body: issuerPublicKey→assetIssuer, name→assetName
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[1].Body["assetIssuer"])
+	assert.Equal(t, "QX", msgs[1].Body["assetName"])
+
+	// Verify type 2 body: sourcePublicKey→source, destinationPublicKey→destination
+	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["source"])
+	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["destination"])
+
+	// Verify type 3 body: sourcePublicKey→source, destinationPublicKey→destination
+	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["source"])
+	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["destination"])
+
+	// Verify type 8 body: publicKey→source
+	assert.Equal(t, "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[4].Body["source"])
+
+	// Verify type 13 body: no renames
+	assert.NotNil(t, msgs[5].Body["deductedAmount"])
+	assert.NotNil(t, msgs[5].Body["remainingAmount"])
+	assert.NotNil(t, msgs[5].Body["contractIndex"])
+}
+
+// TestE2E_KafkaPublishFailure tests that processor disconnects and retries on Kafka failure
+func TestE2E_KafkaPublishFailure(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	mockKafka := kafka.NewMockPublisher()
+	// Make the first publish fail
+	mockKafka.SetFailNext(fmt.Errorf("kafka broker unavailable"))
+
+	cfg := CreateTestConfig(mockBob, tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	// First connection - Kafka will fail
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	payload := CreateLogPayloadWithTimestamp(145, 22000001, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 1000,
+	}, "2024-06-15 14:30:00")
+	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	require.NoError(t, err)
+
+	// Send catchUpComplete to trigger batch flush (and thus Kafka failure)
+	mockBob.SendCatchUpComplete(0, 1, 1)
+
+	// Wait for the processor to reconnect (it will disconnect after Kafka failure)
+	// The mock server accepts new connections, so we wait for a second subscription
+	_, err = mockBob.WaitForSubscription(10 * time.Second)
+	require.NoError(t, err)
+
+	// Small delay to let the mock server's old writeLoop exit so messages
+	// are delivered in order on the new connection
+	time.Sleep(200 * time.Millisecond)
+
+	// Resend the event (bob resends on reconnect)
+	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	require.NoError(t, err)
+	// Small delay to ensure event is delivered before catchUpComplete
+	time.Sleep(50 * time.Millisecond)
+	mockBob.SendCatchUpComplete(0, 1, 1)
+
+	// Now Kafka should succeed and event should be stored
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		exists, _ := storageMgr.HasEvent(145, 22000001, 1)
+		return exists
+	}, "event should be stored after retry")
+
+	msgs := mockKafka.Messages()
+	require.Len(t, msgs, 1, "Event should be published to Kafka on successful retry")
+	assert.Equal(t, uint64(1), msgs[0].LogID)
+}
+
+// TestE2E_IndexResetAfterDeduplication tests that IndexInTick resets to 0 for a new tick
+// even when all events from the previous tick were deduplicated (pendingBatch is nil).
+// This was a bug where tickEventIndex was recovered for lastTick but not reset when
+// transitioning to a new tick if pendingBatch was nil.
+func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
+	tempDir := t.TempDir()
+	tickOld := uint32(22000050) // Previous tick
+	tickNew := uint32(22000051) // New tick
+
+	// Phase 1: Process 3 events for tickOld and stop
+	func() {
+		mockBob := NewMockBobServer(145, 22000000)
+		defer mockBob.Close()
+
+		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		require.NoError(t, err)
+
+		mockKafka := kafka.NewMockPublisher()
+		cfg := CreateTestConfig(mockBob, tempDir)
+		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := startProcessor(ctx, proc)
+
+		_, err = mockBob.WaitForSubscription(5 * time.Second)
+		require.NoError(t, err)
+
+		// Send 3 events for tickOld
+		for i := uint64(1); i <= 3; i++ {
+			payload := CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
+				"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+				"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+				"amount": i,
+			}, "2024-06-15 14:30:00")
+			err = mockBob.SendLogMessage(payload, 0, 0, false)
+			require.NoError(t, err)
+		}
+		mockBob.SendCatchUpComplete(0, 3, 3)
+
+		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+			_, events, _ := storageMgr.GetEventsForTick(tickOld)
+			return len(events) >= 3
+		}, "3 events should be stored for tickOld")
+
+		// Verify indexes are 0, 1, 2
+		msgs := mockKafka.Messages()
+		require.Len(t, msgs, 3)
+		for i, msg := range msgs {
+			require.Equal(t, uint64(i), msg.Index, "Phase 1: event %d should have index %d", i, i)
+		}
+
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	// Phase 2: Restart, resend tickOld events (will be deduplicated), then send tickNew events.
+	// The tickNew events should start with index 0, not index 3.
+	mockBob2 := NewMockBobServer(145, 22000000)
+	defer mockBob2.Close()
+
+	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	mockKafka2 := kafka.NewMockPublisher()
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc2)
+
+	defer func() {
+		stopProcessor(cancel, proc2, done)
+		_ = storageMgr2.Close()
+	}()
+
+	_, err = mockBob2.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Resend the 3 events for tickOld (these will be deduplicated - already in storage)
+	// This simulates bob's catch-up behavior after reconnect
+	for i := uint64(1); i <= 3; i++ {
+		payload := CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		}, "2024-06-15 14:30:00")
+		err = mockBob2.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+
+	// Now send 2 events for tickNew (these should get index 0, 1 - NOT 3, 4)
+	for i := uint64(4); i <= 5; i++ {
+		payload := CreateLogPayloadWithTimestamp(145, tickNew, i, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": i,
+		}, "2024-06-15 14:30:01")
+		err = mockBob2.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+	}
+	mockBob2.SendCatchUpComplete(0, 5, 5)
+
+	// Wait for the new events to be stored
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		_, events, _ := storageMgr2.GetEventsForTick(tickNew)
+		return len(events) >= 2
+	}, "2 events should be stored for tickNew")
+
+	// Verify that tickNew events have indexes 0 and 1 in Kafka (NOT 3 and 4)
+	msgs := mockKafka2.Messages()
+	require.Len(t, msgs, 2, "Only 2 new events should be published to Kafka (tickOld events were deduplicated)")
+
+	// The events should have index 0 and 1 for tickNew
+	for i, msg := range msgs {
+		require.Equal(t, uint64(i), msg.Index, "tickNew event %d should have index %d, not %d", i, i, msg.Index)
+		require.Equal(t, tickNew, msg.TickNumber, "Event should be for tickNew")
+	}
+
+	// Also verify storage IndexInTick values
+	_, eventsNew, err := storageMgr2.GetEventsForTick(tickNew)
+	require.NoError(t, err)
+	require.Len(t, eventsNew, 2)
+
+	indexValues := make(map[uint32]bool)
+	for _, event := range eventsNew {
+		indexValues[event.IndexInTick] = true
+	}
+	require.True(t, indexValues[0], "tickNew should have event with IndexInTick=0")
+	require.True(t, indexValues[1], "tickNew should have event with IndexInTick=1")
+}
+
+// TestE2E_KafkaDeduplication tests that deduplicated events are NOT published to Kafka
+func TestE2E_KafkaDeduplication(t *testing.T) {
+	tempDir := t.TempDir()
+	tick := uint32(22000001)
+
+	// Phase 1: Process an event and store it
+	func() {
+		mockBob := NewMockBobServer(145, 22000000)
+		defer mockBob.Close()
+
+		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		require.NoError(t, err)
+
+		mockKafka := kafka.NewMockPublisher()
+		cfg := CreateTestConfig(mockBob, tempDir)
+		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		done := startProcessor(ctx, proc)
+
+		_, err = mockBob.WaitForSubscription(5 * time.Second)
+		require.NoError(t, err)
+
+		payload := CreateLogPayloadWithTimestamp(145, tick, 1, 0, map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": 1000,
+		}, "2024-06-15 14:30:00")
+		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		require.NoError(t, err)
+		mockBob.SendCatchUpComplete(0, 1, 1)
+
+		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+			exists, _ := storageMgr.HasEvent(145, tick, 1)
+			return exists
+		}, "event should be stored")
+
+		// Verify Kafka got it
+		require.Len(t, mockKafka.Messages(), 1)
+
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	// Phase 2: Restart and resend the same event — should be deduplicated
+	mockBob2 := NewMockBobServer(145, 22000000)
+	defer mockBob2.Close()
+
+	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	mockKafka2 := kafka.NewMockPublisher()
+	cfg2 := CreateTestConfig(mockBob2, tempDir)
+	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc2)
+
+	defer func() {
+		stopProcessor(cancel, proc2, done)
+		_ = storageMgr2.Close()
+	}()
+
+	_, err = mockBob2.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Resend the same event (bob resends on reconnect)
+	payload := CreateLogPayloadWithTimestamp(145, tick, 1, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 1000,
+	}, "2024-06-15 14:30:00")
+	err = mockBob2.SendLogMessage(payload, 0, 0, false)
+	require.NoError(t, err)
+
+	// Send a new event to confirm processing continues
+	payload2 := CreateLogPayloadWithTimestamp(145, tick, 2, 0, map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 2000,
+	}, "2024-06-15 14:30:01")
+	err = mockBob2.SendLogMessage(payload2, 0, 0, false)
+	require.NoError(t, err)
+	mockBob2.SendCatchUpComplete(0, 2, 2)
+
+	// Wait for the new event
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		exists, _ := storageMgr2.HasEvent(145, tick, 2)
+		return exists
+	}, "new event should be stored")
+
+	// Verify only the new event was published to Kafka (duplicate was skipped)
+	msgs := mockKafka2.Messages()
+	require.Len(t, msgs, 1, "Only non-duplicate event should be published to Kafka")
+	assert.Equal(t, uint64(2), msgs[0].LogID, "Only the new event should be published")
 }

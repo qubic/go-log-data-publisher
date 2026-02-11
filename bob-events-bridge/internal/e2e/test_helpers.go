@@ -14,11 +14,11 @@ import (
 var ErrTimeout = errors.New("timeout waiting for condition")
 
 // CreateTestConfig creates a test configuration pointing to the mock server
-func CreateTestConfig(wsURL, storagePath string) *config.Config {
+func CreateTestConfig(mockBob *MockBobServer, storagePath string) *config.Config {
 	return &config.Config{
 		Bob: config.BobConfig{
-			WebSocketURL: wsURL,
-			StatusURL:    "http://localhost:40420/status",
+			WebSocketURL: mockBob.URL(),
+			StatusURL:    mockBob.StatusURL(),
 			LogTypes:     "0 1 2 3",
 		},
 		Storage: config.StorageConfig{
@@ -34,6 +34,11 @@ func CreateTestConfig(wsURL, storagePath string) *config.Config {
 
 // CreateLogPayload creates a LogPayload with all required fields
 func CreateLogPayload(epoch uint16, tick uint32, logID uint64, eventType uint32, body map[string]any) bob.LogPayload {
+	return CreateLogPayloadWithTimestamp(epoch, tick, logID, eventType, body, time.Now().UTC().Format(time.RFC3339))
+}
+
+// CreateLogPayloadWithTimestamp creates a LogPayload with a specific timestamp string.
+func CreateLogPayloadWithTimestamp(epoch uint16, tick uint32, logID uint64, eventType uint32, body map[string]any, timestamp string) bob.LogPayload {
 	var bodyJSON json.RawMessage
 	if body != nil {
 		bodyJSON, _ = json.Marshal(body)
@@ -47,7 +52,7 @@ func CreateLogPayload(epoch uint16, tick uint32, logID uint64, eventType uint32,
 		LogID:     logID,
 		LogDigest: "test-digest",
 		BodySize:  uint32(len(bodyJSON)),
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Timestamp: timestamp,
 		TxHash:    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		Body:      bodyJSON,
 	}

@@ -53,20 +53,20 @@ func (c *WSClient) Connect(ctx context.Context) (*WelcomeMessage, error) {
 	// Read the welcome message
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.connected = false
 		return nil, fmt.Errorf("failed to read welcome message: %w", err)
 	}
 
 	var welcome WelcomeMessage
 	if err := json.Unmarshal(msg, &welcome); err != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.connected = false
 		return nil, fmt.Errorf("failed to parse welcome message: %w", err)
 	}
 
 	if welcome.Type != MessageTypeWelcome {
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.connected = false
 		return nil, fmt.Errorf("expected welcome message, got: %s", welcome.Type)
 	}
@@ -78,11 +78,11 @@ func (c *WSClient) Connect(ctx context.Context) (*WelcomeMessage, error) {
 	return &welcome, nil
 }
 
-// Subscribe sends subscription requests with optional resumption parameters.
+// Subscribe sends subscription requests with optional resumption from lastTick.
 // Each subscription is sent individually with scIndex + logType.
-// Resumption params (lastLogId/lastTick) are only sent on the FIRST subscription
-// since logIDs are global across all log types.
-func (c *WSClient) Subscribe(subscriptions []SubscriptionEntry, lastLogID *int64, lastTick *uint32) error {
+// The lastTick param is only sent on the FIRST subscription since catch-up
+// happens once from that tick boundary.
+func (c *WSClient) Subscribe(subscriptions []SubscriptionEntry, lastTick *uint32) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -91,8 +91,8 @@ func (c *WSClient) Subscribe(subscriptions []SubscriptionEntry, lastLogID *int64
 	}
 
 	// Send individual subscription for each log type
-	// Only include resumption params on the FIRST subscription
-	// (logIDs are global, so catch-up only needs to happen once)
+	// Only include lastTick on the FIRST subscription
+	// (catch-up only needs to happen once from that tick boundary)
 	for i, sub := range subscriptions {
 		scIndex := sub.SCIndex
 		logType := sub.LogType
@@ -103,13 +103,9 @@ func (c *WSClient) Subscribe(subscriptions []SubscriptionEntry, lastLogID *int64
 			LogType: &logType,
 		}
 
-		// Only add resumption params on the first subscription
-		if i == 0 {
-			// Use lastTick for resumption (server catches up tick-by-tick)
-			// lastLogId is ignored - we'll deduplicate on our side
-			if lastTick != nil && *lastTick > 0 {
-				req.LastTick = lastTick
-			}
+		// Only add lastTick on the first subscription
+		if i == 0 && lastTick != nil && *lastTick > 0 {
+			req.LastTick = lastTick
 		}
 
 		data, err := json.Marshal(req)
@@ -124,7 +120,7 @@ func (c *WSClient) Subscribe(subscriptions []SubscriptionEntry, lastLogID *int64
 		c.logger.Debug("Sent subscription",
 			zap.Uint32("scIndex", scIndex),
 			zap.Uint32("logType", logType),
-			zap.Bool("withResume", i == 0 && (lastLogID != nil || lastTick != nil)))
+			zap.Bool("withResume", i == 0 && lastTick != nil))
 	}
 
 	c.logger.Info("Sent subscription requests",
@@ -183,7 +179,7 @@ func (c *WSClient) Close() error {
 
 	// Send close message
 	deadline := time.Now().Add(time.Second)
-	c.conn.WriteControl(websocket.CloseMessage,
+	_ = c.conn.WriteControl(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
 		deadline)
 

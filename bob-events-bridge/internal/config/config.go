@@ -22,14 +22,17 @@ type Config struct {
 	Bob     BobConfig
 	Storage StorageConfig
 	Server  ServerConfig
+	Kafka   KafkaConfig
 	Debug   bool `conf:"default:false,help:enable debug logging"`
 }
 
 // BobConfig holds the bob node connection configuration
 type BobConfig struct {
-	WebSocketURL string `conf:"default:ws://localhost:40420/ws/logs,help:bob WebSocket URL"`
-	StatusURL    string `conf:"default:http://localhost:40420/status,help:bob status endpoint URL"`
-	LogTypes     string `conf:"default:0 1 2 3,help:space-separated log types to subscribe to"`
+	WebSocketURL      string `conf:"default:ws://localhost:40420/ws/logs,help:bob WebSocket URL"`
+	StatusURL         string `conf:"default:http://localhost:40420/status,help:bob status endpoint URL"`
+	LogTypes          string `conf:"default:0 1 2 3 8 13,help:space-separated log types to subscribe to"`
+	OverrideStartTick bool   `conf:"default:false,help:override persisted state and start from StartTick"`
+	StartTick         uint32 `conf:"default:0,help:tick to start syncing from (requires OverrideStartTick)"`
 }
 
 // StorageConfig holds the storage configuration
@@ -41,6 +44,13 @@ type StorageConfig struct {
 type ServerConfig struct {
 	GRPCAddr string `conf:"default:0.0.0.0:8001,help:gRPC server address"`
 	HTTPAddr string `conf:"default:0.0.0.0:8000,help:HTTP server address"`
+}
+
+// KafkaConfig holds the Kafka publisher configuration
+type KafkaConfig struct {
+	Brokers string `conf:"default:localhost:9092,help:comma-separated Kafka broker addresses"`
+	Topic   string `conf:"default:qubic-events,help:Kafka topic name"`
+	Enabled bool   `conf:"default:false,help:enable Kafka publishing"`
 }
 
 // SubscriptionEntry represents a single subscription

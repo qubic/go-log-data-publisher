@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/qubic/bob-events-bridge/internal/config"
 	"github.com/qubic/bob-events-bridge/internal/grpc"
+	"github.com/qubic/bob-events-bridge/internal/kafka"
 	"github.com/qubic/bob-events-bridge/internal/processor"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 	"go.uber.org/zap"
@@ -33,7 +35,7 @@ func main() {
 	if err != nil {
 		panic("failed to create logger: " + err.Error())
 	}
-	defer logger.Sync()
+	defer logger.Sync() //nolint:errcheck
 
 	logger.Info("Starting bob-events-bridge",
 		zap.String("version", config.Version),
@@ -44,6 +46,11 @@ func main() {
 		zap.String("storagePath", cfg.Storage.BasePath),
 		zap.String("grpcAddr", cfg.Server.GRPCAddr),
 		zap.String("httpAddr", cfg.Server.HTTPAddr))
+
+	if cfg.Bob.OverrideStartTick {
+		logger.Info("Start tick override enabled",
+			zap.Uint32("startTick", cfg.Bob.StartTick))
+	}
 
 	// Parse subscriptions
 	subscriptions, err := cfg.GetSubscriptions()
@@ -57,7 +64,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize storage", zap.Error(err))
 	}
-	defer storageMgr.Close()
+	defer storageMgr.Close() //nolint:errcheck
 
 	logger.Info("Storage initialized",
 		zap.Strings("epochs", epochsToStrings(storageMgr.GetAvailableEpochs())))
@@ -73,8 +80,19 @@ func main() {
 
 	logger.Info("gRPC and HTTP servers started")
 
+	// Initialize Kafka publisher if enabled
+	var kafkaPublisher kafka.Publisher
+	if cfg.Kafka.Enabled {
+		brokers := strings.Split(cfg.Kafka.Brokers, ",")
+		kafkaPublisher = kafka.NewProducer(brokers, cfg.Kafka.Topic, logger)
+		defer kafkaPublisher.Close() //nolint:errcheck
+		logger.Info("Kafka publisher enabled",
+			zap.Strings("brokers", brokers),
+			zap.String("topic", cfg.Kafka.Topic))
+	}
+
 	// Create processor
-	proc := processor.NewProcessor(cfg, subscriptions, storageMgr, logger)
+	proc := processor.NewProcessor(cfg, subscriptions, storageMgr, logger, kafkaPublisher)
 
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())

@@ -10,10 +10,20 @@ import (
 	eventsbridge "github.com/qubic/bob-events-bridge/api/events-bridge/v1"
 	"github.com/qubic/bob-events-bridge/internal/bob"
 	"github.com/qubic/bob-events-bridge/internal/config"
+	"github.com/qubic/bob-events-bridge/internal/kafka"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+// tickBatch accumulates events for a single tick before flushing
+type tickBatch struct {
+	tick        uint32
+	epoch       uint32
+	kafkaMsgs   []*kafka.EventMessage
+	protoEvents []*eventsbridge.Event
+	lastLogID   uint64
+}
 
 // Processor handles connecting to bob and processing events
 type Processor struct {
@@ -22,6 +32,7 @@ type Processor struct {
 	storage       *storage.Manager
 	logger        *zap.Logger
 	client        *bob.WSClient
+	publisher     kafka.Publisher // nil if Kafka disabled
 
 	mu             sync.RWMutex
 	running        bool
@@ -29,15 +40,20 @@ type Processor struct {
 	lastLogID      int64
 	lastTick       uint32
 	eventsReceived uint64
+	tickEventIndex uint32
+	tickForIndex   uint32 // The tick that tickEventIndex is valid for
+
+	pendingBatch *tickBatch
 }
 
 // NewProcessor creates a new event processor
-func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger) *Processor {
+func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher) *Processor {
 	return &Processor{
 		cfg:           cfg,
 		subscriptions: subscriptions,
 		storage:       storage,
 		logger:        logger,
+		publisher:     publisher,
 	}
 }
 
@@ -57,8 +73,39 @@ func (p *Processor) Start(ctx context.Context) error {
 			zap.Uint32("epoch", p.currentEpoch),
 			zap.Int64("lastLogID", p.lastLogID),
 			zap.Uint32("lastTick", p.lastTick))
+
+		if state.LastTick > 0 {
+			count, err := p.storage.CountEventsForTick(state.CurrentEpoch, state.LastTick)
+			if err != nil {
+				p.logger.Warn("Failed to count events for tick, starting index at 0",
+					zap.Uint32("tick", state.LastTick),
+					zap.Error(err))
+			} else {
+				p.tickEventIndex = count
+				p.tickForIndex = state.LastTick
+				p.logger.Info("Recovered tick event index",
+					zap.Uint32("tick", state.LastTick),
+					zap.Uint32("tickEventIndex", p.tickEventIndex))
+			}
+		}
 	} else {
-		p.logger.Info("Starting fresh, no previous state found")
+		// Clean start — fetch initialTick from bob status endpoint
+		status, err := bob.FetchStatus(ctx, p.cfg.Bob.StatusURL)
+		if err != nil {
+			return fmt.Errorf("failed to fetch bob status for initial tick: %w", err)
+		}
+		p.lastTick = status.InitialTick
+		p.logger.Info("Starting fresh from bob's initial tick",
+			zap.Uint32("initialTick", p.lastTick))
+	}
+
+	// Override start tick if configured (overrides both persisted state and fresh start)
+	if p.cfg.Bob.OverrideStartTick {
+		p.lastTick = p.cfg.Bob.StartTick
+		p.lastLogID = 0
+		p.tickEventIndex = 0
+		p.logger.Info("Overriding start tick from config",
+			zap.Uint32("startTick", p.lastTick))
 	}
 
 	p.mu.Lock()
@@ -95,7 +142,7 @@ func (p *Processor) Stop() {
 	p.mu.Unlock()
 
 	if p.client != nil {
-		p.client.Close()
+		_ = p.client.Close()
 	}
 }
 
@@ -128,18 +175,14 @@ func (p *Processor) connectAndProcess(ctx context.Context) error {
 		}
 	}
 
-	// Subscribe with both lastLogID and lastTick for crash recovery
-	var lastLogIDPtr *int64
+	// Subscribe with lastTick for crash recovery (tick-based resumption only)
 	var lastTickPtr *uint32
-	if p.lastLogID > 0 {
-		lastLogIDPtr = &p.lastLogID
-	}
 	if p.lastTick > 0 {
 		lastTickPtr = &p.lastTick
 	}
 
-	if err := p.client.Subscribe(subscriptions, lastLogIDPtr, lastTickPtr); err != nil {
-		p.client.Close()
+	if err := p.client.Subscribe(subscriptions, lastTickPtr); err != nil {
+		_ = p.client.Close()
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 
@@ -176,6 +219,9 @@ func (p *Processor) processMessages(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			if err := p.flushBatch(ctx); err != nil {
+				p.logger.Warn("Failed to flush batch on context cancellation", zap.Error(err))
+			}
 			return ctx.Err()
 		default:
 		}
@@ -183,17 +229,21 @@ func (p *Processor) processMessages(ctx context.Context) error {
 		msg, err := p.client.ReadMessage()
 		if err != nil {
 			p.client.SetConnected(false)
+			if flushErr := p.flushBatch(context.Background()); flushErr != nil {
+				p.logger.Warn("Failed to flush batch on disconnect", zap.Error(flushErr))
+			}
 			return fmt.Errorf("read error: %w", err)
 		}
 
-		if err := p.handleMessage(msg); err != nil {
-			p.logger.Error("Failed to handle message", zap.Error(err))
+		if err := p.handleMessage(ctx, msg); err != nil {
+			p.logger.Error("Failed to handle message", zap.Error(err), zap.ByteString("rawMessage", msg))
+			return fmt.Errorf("fatal message handling error: %w", err)
 		}
 	}
 }
 
 // handleMessage processes a single message from bob
-func (p *Processor) handleMessage(data []byte) error {
+func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 	var base bob.BaseMessage
 	if err := json.Unmarshal(data, &base); err != nil {
 		return fmt.Errorf("failed to parse base message: %w", err)
@@ -206,9 +256,13 @@ func (p *Processor) handleMessage(data []byte) error {
 
 	switch base.Type {
 	case bob.MessageTypeLog:
-		return p.handleLogMessage(data)
+		return p.handleLogMessage(ctx, data)
 
 	case bob.MessageTypeCatchUpComplete:
+		if err := p.flushBatch(ctx); err != nil {
+			return fmt.Errorf("failed to flush batch on catch-up complete: %w", err)
+		}
+
 		var msg bob.CatchUpCompleteMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return fmt.Errorf("failed to parse catchup message: %w", err)
@@ -249,8 +303,47 @@ func (p *Processor) handleMessage(data []byte) error {
 	return nil
 }
 
+// flushBatch publishes and stores the pending batch, then resets it.
+// On failure the batch is discarded — the processor will disconnect and
+// bob will resend from lastTick on reconnect (at-least-once).
+func (p *Processor) flushBatch(ctx context.Context) error {
+	if p.pendingBatch == nil || len(p.pendingBatch.protoEvents) == 0 {
+		p.pendingBatch = nil
+		return nil
+	}
+
+	batch := p.pendingBatch
+	p.pendingBatch = nil
+
+	// Publish to Kafka before storage (at-least-once delivery)
+	if p.publisher != nil && len(batch.kafkaMsgs) > 0 {
+		if err := p.publisher.PublishEvents(ctx, batch.kafkaMsgs); err != nil {
+			return fmt.Errorf("failed to publish batch to kafka: %w", err)
+		}
+	}
+
+	// Batch PebbleDB write
+	if err := p.storage.StoreEvents(batch.protoEvents); err != nil {
+		return fmt.Errorf("failed to store event batch: %w", err)
+	}
+
+	// Update local state
+	p.mu.Lock()
+	p.lastLogID = int64(batch.lastLogID)
+	p.lastTick = batch.tick
+	p.eventsReceived += uint64(len(batch.protoEvents))
+	p.mu.Unlock()
+
+	p.logger.Debug("Flushed batch",
+		zap.Uint32("tick", batch.tick),
+		zap.Uint32("epoch", batch.epoch),
+		zap.Int("events", len(batch.protoEvents)))
+
+	return nil
+}
+
 // handleLogMessage processes a log event
-func (p *Processor) handleLogMessage(data []byte) error {
+func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 	var logMsg bob.LogMessage
 	if err := json.Unmarshal(data, &logMsg); err != nil {
 		return fmt.Errorf("failed to parse log message: %w", err)
@@ -267,12 +360,32 @@ func (p *Processor) handleLogMessage(data []byte) error {
 		return nil
 	}
 
-	// Check for epoch transition
+	// Check for epoch transition — flush before changing epoch
 	if uint32(payload.Epoch) != p.currentEpoch {
+		if err := p.flushBatch(ctx); err != nil {
+			return fmt.Errorf("failed to flush batch on epoch transition: %w", err)
+		}
 		p.logger.Info("Epoch transition detected",
 			zap.Uint32("oldEpoch", p.currentEpoch),
 			zap.Uint16("newEpoch", payload.Epoch))
 		p.currentEpoch = uint32(payload.Epoch)
+	}
+
+	// Tick boundary — flush if tick changed
+	if p.pendingBatch != nil && payload.Tick != p.pendingBatch.tick {
+		if err := p.flushBatch(ctx); err != nil {
+			return fmt.Errorf("failed to flush batch on tick change: %w", err)
+		}
+		p.tickEventIndex = 0
+		p.tickForIndex = payload.Tick
+	}
+
+	// Reset index if processing a different tick than what tickEventIndex was recovered/set for.
+	// This handles the case where pendingBatch is nil (e.g., all events for the previous tick
+	// were deduplicated) but we're now processing a new tick.
+	if p.tickForIndex != 0 && p.tickForIndex != payload.Tick {
+		p.tickEventIndex = 0
+		p.tickForIndex = payload.Tick
 	}
 
 	// Deduplication check: skip if we already have this event
@@ -288,54 +401,77 @@ func (p *Processor) handleLogMessage(data []byte) error {
 		return nil
 	}
 
-	// Convert body JSON to protobuf Struct
+	// Validate and parse body into typed struct
+	parsed, err := bob.ParseEventBody(payload.Type, payload.Body)
+	if err != nil {
+		return fmt.Errorf("failed to parse event body for log type %d: %w", payload.Type, err)
+	}
+
+	// Convert typed struct to protobuf Struct
 	var bodyStruct *structpb.Struct
-	if len(payload.Body) > 0 {
-		var bodyMap map[string]interface{}
-		if err := json.Unmarshal(payload.Body, &bodyMap); err != nil {
-			p.logger.Warn("Failed to parse body as JSON object, skipping body",
-				zap.Error(err),
-				zap.ByteString("body", payload.Body))
-		} else {
-			bodyStruct, err = structpb.NewStruct(bodyMap)
-			if err != nil {
-				p.logger.Warn("Failed to convert body to protobuf Struct",
-					zap.Error(err))
-			}
+	if parsed != nil {
+		bodyMap, err := bob.EventBodyToMap(parsed)
+		if err != nil {
+			return fmt.Errorf("failed to convert event body to map: %w", err)
+		}
+		bodyStruct, err = structpb.NewStruct(bodyMap)
+		if err != nil {
+			return fmt.Errorf("failed to convert body to protobuf Struct: %w", err)
+		}
+	}
+
+	// Build kafka message (if publisher configured)
+	var kafkaMsg *kafka.EventMessage
+	if p.publisher != nil {
+		kafkaMsg, err = kafka.BuildEventMessage(&logMsg, &payload, parsed, p.tickEventIndex)
+		if err != nil {
+			return fmt.Errorf("failed to build kafka message: %w", err)
 		}
 	}
 
 	// Create event proto
 	event := &eventsbridge.Event{
-		LogId:     payload.LogID,
-		Tick:      payload.Tick,
-		Epoch:     uint32(payload.Epoch),
-		EventType: payload.Type,
-		TxHash:    payload.TxHash,
-		Timestamp: payload.Timestamp,
-		Body:      bodyStruct,
+		LogId:       payload.LogID,
+		Tick:        payload.Tick,
+		Epoch:       uint32(payload.Epoch),
+		EventType:   payload.Type,
+		TxHash:      payload.TxHash,
+		Timestamp:   payload.Timestamp,
+		Body:        bodyStruct,
+		IndexInTick: p.tickEventIndex,
 	}
 
-	// Store the event
-	if err := p.storage.StoreEvent(event); err != nil {
-		return fmt.Errorf("failed to store event: %w", err)
+	// Initialize batch if nil
+	if p.pendingBatch == nil {
+		p.pendingBatch = &tickBatch{
+			tick:  payload.Tick,
+			epoch: uint32(payload.Epoch),
+		}
+		// Track which tick the index is for
+		if p.tickForIndex == 0 {
+			p.tickForIndex = payload.Tick
+		}
 	}
 
-	// Update local state
-	p.mu.Lock()
-	p.lastLogID = int64(payload.LogID)
-	p.lastTick = payload.Tick
-	p.eventsReceived++
-	p.mu.Unlock()
+	// Add to batch
+	if kafkaMsg != nil {
+		p.pendingBatch.kafkaMsgs = append(p.pendingBatch.kafkaMsgs, kafkaMsg)
+	}
+	p.pendingBatch.protoEvents = append(p.pendingBatch.protoEvents, event)
+	p.pendingBatch.lastLogID = payload.LogID
 
-	p.logger.Debug("Stored event",
+	p.tickEventIndex++
+
+	p.logger.Debug("Buffered event",
 		zap.Uint64("logID", payload.LogID),
 		zap.Uint32("tick", payload.Tick),
 		zap.Uint16("epoch", payload.Epoch),
 		zap.Uint32("type", payload.Type),
 		zap.Uint32("scIndex", logMsg.SCIndex),
 		zap.Uint32("logType", logMsg.LogType),
-		zap.Bool("isCatchUp", logMsg.IsCatchUp))
+		zap.Bool("isCatchUp", logMsg.IsCatchUp),
+		zap.Bool("kafkaEnabled", p.publisher != nil),
+		zap.Int("batchSize", len(p.pendingBatch.protoEvents)))
 
 	return nil
 }

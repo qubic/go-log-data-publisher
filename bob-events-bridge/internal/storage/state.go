@@ -83,7 +83,7 @@ func (s *StateStore) LoadState() (*State, error) {
 // UpdateState atomically updates the processing state
 func (s *StateStore) UpdateState(epoch uint32, logID int64, tick uint32) error {
 	batch := s.db.NewBatch()
-	defer batch.Close()
+	defer batch.Close() //nolint:errcheck
 
 	// Set current epoch
 	epochVal := make([]byte, 4)
@@ -119,7 +119,7 @@ func (s *StateStore) UpdateEpochTickRange(epoch, tick uint32) error {
 	maxKey := fmt.Sprintf(keyEpochMaxTick, epoch)
 
 	batch := s.db.NewBatch()
-	defer batch.Close()
+	defer batch.Close() //nolint:errcheck
 
 	// Check and update min tick
 	currentMin, hasMin, err := s.getUint32(minKey)
@@ -183,6 +183,21 @@ func (s *StateStore) IncrementEpochEventCount(epoch uint32) error {
 	return s.db.Set([]byte(key), val, pebble.Sync)
 }
 
+// IncrementEpochEventCountBy increments the event count for an epoch by count
+func (s *StateStore) IncrementEpochEventCountBy(epoch uint32, count uint64) error {
+	key := fmt.Sprintf(keyEpochEventCount, epoch)
+
+	current, _, err := s.getUint64(key)
+	if err != nil {
+		return err
+	}
+
+	val := make([]byte, 8)
+	binary.LittleEndian.PutUint64(val, current+count)
+
+	return s.db.Set([]byte(key), val, pebble.Sync)
+}
+
 // GetEpochEventCount returns the event count for an epoch
 func (s *StateStore) GetEpochEventCount(epoch uint32) (uint64, error) {
 	key := fmt.Sprintf(keyEpochEventCount, epoch)
@@ -200,7 +215,7 @@ func (s *StateStore) getUint32(key string) (uint32, bool, error) {
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to get %s: %w", key, err)
 	}
-	defer closer.Close()
+	defer closer.Close() //nolint:errcheck
 
 	if len(val) < 4 {
 		return 0, false, fmt.Errorf("invalid value length for %s: %d", key, len(val))
@@ -217,7 +232,7 @@ func (s *StateStore) getInt64(key string) (int64, bool, error) {
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to get %s: %w", key, err)
 	}
-	defer closer.Close()
+	defer closer.Close() //nolint:errcheck
 
 	if len(val) < 8 {
 		return 0, false, fmt.Errorf("invalid value length for %s: %d", key, len(val))
@@ -234,7 +249,7 @@ func (s *StateStore) getUint64(key string) (uint64, bool, error) {
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to get %s: %w", key, err)
 	}
-	defer closer.Close()
+	defer closer.Close() //nolint:errcheck
 
 	if len(val) < 8 {
 		return 0, false, fmt.Errorf("invalid value length for %s: %d", key, len(val))

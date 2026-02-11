@@ -43,7 +43,7 @@ func NewManager(basePath string, logger *zap.Logger) (*Manager, error) {
 
 	// Discover and open existing epoch databases
 	if err := m.discoverEpochDBs(); err != nil {
-		state.Close()
+		_ = state.Close()
 		return nil, fmt.Errorf("failed to discover epoch dbs: %w", err)
 	}
 
@@ -148,6 +148,15 @@ func (m *Manager) GetEpochDB(epoch uint32) *EpochDB {
 	return m.epochDBs[epoch]
 }
 
+// CountEventsForTick counts the number of events stored for a given tick in the specified epoch
+func (m *Manager) CountEventsForTick(epoch uint32, tick uint32) (uint32, error) {
+	db := m.GetEpochDB(epoch)
+	if db == nil {
+		return 0, nil
+	}
+	return db.CountEventsForTick(tick)
+}
+
 // HasEvent checks if an event exists in the specified epoch
 func (m *Manager) HasEvent(epoch uint32, tick uint32, logID uint64) (bool, error) {
 	db := m.GetEpochDB(epoch)
@@ -181,6 +190,44 @@ func (m *Manager) StoreEvent(event *eventsbridge.Event) error {
 
 	// Increment event count
 	if err := m.state.IncrementEpochEventCount(event.Epoch); err != nil {
+		m.logger.Warn("Failed to increment event count", zap.Error(err))
+	}
+
+	return nil
+}
+
+// StoreEvents stores a batch of events (assumed to be same epoch) and updates state
+func (m *Manager) StoreEvents(events []*eventsbridge.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	// All events in a batch are for the same epoch
+	epoch := events[0].Epoch
+
+	db, err := m.GetOrCreateEpochDB(epoch)
+	if err != nil {
+		return fmt.Errorf("failed to get epoch db: %w", err)
+	}
+
+	// Batch store all events
+	if err := db.StoreEvents(events); err != nil {
+		return fmt.Errorf("failed to store events: %w", err)
+	}
+
+	// Update state with last event's info
+	last := events[len(events)-1]
+	if err := m.state.UpdateState(epoch, int64(last.LogId), last.Tick); err != nil {
+		return fmt.Errorf("failed to update state: %w", err)
+	}
+
+	// Update epoch tick range
+	if err := m.state.UpdateEpochTickRange(epoch, last.Tick); err != nil {
+		m.logger.Warn("Failed to update epoch tick range", zap.Error(err))
+	}
+
+	// Increment event count by batch size
+	if err := m.state.IncrementEpochEventCountBy(epoch, uint64(len(events))); err != nil {
 		m.logger.Warn("Failed to increment event count", zap.Error(err))
 	}
 
