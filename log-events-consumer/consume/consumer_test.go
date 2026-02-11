@@ -56,7 +56,7 @@ func TestConsumeBatch_Success(t *testing.T) {
 		"emittingContractIndex": 5,
 		"logId": 12345,
 		"logDigest": "test-digest",
-		"transactionHash": "tx-hash",
+		"transactionHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		"timestamp": 1704067200,
 		"bodySize": 100,
 		"body": {
@@ -378,7 +378,7 @@ func TestConsumeBatch_MultipleRecords(t *testing.T) {
 		Type:            1, // Non-zero to avoid filtering
 		LogId:           1,
 		LogDigest:       "digest1",
-		TransactionHash: "hash1",
+		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:       1704067200,
 		Body:            map[string]any{},
 	}
@@ -388,7 +388,7 @@ func TestConsumeBatch_MultipleRecords(t *testing.T) {
 		Type:            1, // Non-zero to avoid filtering
 		LogId:           2,
 		LogDigest:       "digest2",
-		TransactionHash: "hash2",
+		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:       1704067201,
 		Body:            map[string]any{},
 	}
@@ -538,7 +538,7 @@ func TestConsumeBatch_LogIdOverflow(t *testing.T) {
 		Type:            1,                       // Non-zero to avoid filtering
 		LogId:           uint64(math.MaxInt) + 1, // This will overflow when cast to int
 		LogDigest:       "test-digest",
-		TransactionHash: "tx-hash",
+		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:       1704067200,
 		Body:            map[string]any{},
 	}
@@ -607,7 +607,7 @@ func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 		EmittingContractIndex: 0,
 		LogId:                 12345,
 		LogDigest:             "test-digest",
-		TransactionHash:       "tx-hash",
+		TransactionHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:             1704067200,
 		Body:                  map[string]any{}, // No amount field means Amount=0
 	}
@@ -718,7 +718,7 @@ func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
 				Type:            tt.typ,
 				LogId:           12345,
 				LogDigest:       "test-digest",
-				TransactionHash: "tx-hash",
+				TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 				Timestamp:       1704067200,
 				Body:            body,
 			}
@@ -846,13 +846,14 @@ func TestConsumeBatch_EpochOverflow(t *testing.T) {
 
 func TestConsumeBatch_IDUniqueness(t *testing.T) {
 	// Test that IDs are unique even with potential collision patterns
+	const validTxHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib"
 	logEvent1 := domain.LogEvent{
 		Epoch:           1,
 		TickNumber:      1000,
 		Type:            1,
 		LogId:           23,
 		LogDigest:       "digest1",
-		TransactionHash: "hash1",
+		TransactionHash: validTxHash,
 		Timestamp:       1704067200,
 		Body:            map[string]any{},
 	}
@@ -862,7 +863,7 @@ func TestConsumeBatch_IDUniqueness(t *testing.T) {
 		Type:            1,
 		LogId:           3,
 		LogDigest:       "digest2",
-		TransactionHash: "hash2",
+		TransactionHash: validTxHash,
 		Timestamp:       1704067201,
 		Body:            map[string]any{},
 	}

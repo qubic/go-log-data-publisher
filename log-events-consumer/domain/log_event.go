@@ -3,19 +3,22 @@ package domain
 import (
 	"fmt"
 	"strings"
+
+	"github.com/qubic/go-node-connector/types"
 )
 
 // Special system transactions
-// Qubic supports, per tick, 1024 regular user transactions and a couple special transactions that SCs execute.
+// Qubic supports, per tick, 1024 regular user transactions and a couple special
+// 'transactions' (special not transaction-related event logs).
 // In the core node code their index is defined as the NR_OF_TRANSACTIONS_PER_TICK + offset.
 // In this code, they are mapped to their appropriate offset, which will be published to elastic if encountered.
-var sysTransactionMap = map[string]byte{
-	"SC_INITIALIZE_TX":   0x00,
-	"SC_BEGIN_EPOCH_TX":  0x01,
-	"SC_BEGIN_TICK_TX":   0x02,
-	"SC_END_TICK_TX":     0x03,
-	"SC_END_EPOCH_TX":    0x04,
-	"SC_NOTIFICATION_TX": 0x05,
+var sysTransactionMap = map[string]uint8{
+	"SC_INITIALIZE_TX":   1,
+	"SC_BEGIN_EPOCH_TX":  2,
+	"SC_BEGIN_TICK_TX":   3,
+	"SC_END_TICK_TX":     4,
+	"SC_END_EPOCH_TX":    5,
+	"SC_NOTIFICATION_TX": 6,
 }
 
 type LogEvent struct {
@@ -48,7 +51,7 @@ type LogEventPtr struct {
 }
 
 // ToLogEvent converts the pointer-based LogEventPtr into a concrete LogEvent.
-// It validates presence (non-nil) of required fields and returns an error if any are missing.
+// It validates the presence (non-nil) of required fields and returns an error if any are missing.
 func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 	missing := make([]string, 0, 6)
 	if lep.Epoch == nil {
@@ -75,8 +78,29 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 	if lep.EmittingContractIndex == nil {
 		missing = append(missing, "emittingContractIndex")
 	}
+
 	if len(missing) > 0 {
 		return LogEvent{}, fmt.Errorf("missing required fields: %v", missing)
+	}
+
+	if *lep.Epoch == 0 {
+		missing = append(missing, "epoch")
+	}
+	if *lep.TickNumber == 0 {
+		missing = append(missing, "tickNumber")
+	}
+	if *lep.LogId == 0 {
+		missing = append(missing, "logId")
+	}
+	if *lep.LogDigest == "" {
+		missing = append(missing, "logDigest")
+	}
+	if *lep.Timestamp == 0 {
+		missing = append(missing, "timestamp")
+	}
+
+	if len(missing) > 0 {
+		return LogEvent{}, fmt.Errorf("invalid zero value field(s): %v", missing)
 	}
 
 	// Optional fields: if absent, use zero-values
@@ -125,16 +149,17 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		Type:                  int16(le.Type),
 	}
 
-	txCategory, isSpecialTx, err := isSpecialSystemTransaction(logEventElastic.TransactionHash)
+	eventLogCategory, isSpecialEventLog, err := inferCategoryFromTransactionHash(logEventElastic.TransactionHash)
 	if err != nil {
 		return LogEventElastic{}, fmt.Errorf("checking if transactionHash is special: %w", err)
 	}
-	if isSpecialTx {
+	if isSpecialEventLog {
 		// We want to omit transactionHash field if tx is special, and instead set the category
 		logEventElastic.TransactionHash = ""
-		logEventElastic.Category = &txCategory
+		logEventElastic.Category = &eventLogCategory
 	}
 
+	// FIXME convert body values explicitly per type
 	for key, value := range le.Body {
 		var err error
 		switch key {
@@ -212,7 +237,7 @@ type LogEventElastic struct {
 	TickNumber            uint32 `json:"tickNumber"`
 	Timestamp             int64  `json:"timestamp"`
 	EmittingContractIndex uint32 `json:"emittingContractIndex"`
-	TransactionHash       string `json:"transactionHash,omitempty"`
+	TransactionHash       string `json:"transactionHash,omitempty"` // do not send, if empty!
 	LogId                 uint64 `json:"logId"`
 	LogDigest             string `json:"logDigest"`
 	Type                  int16  `json:"type"`
@@ -221,7 +246,7 @@ type LogEventElastic struct {
 	// Important to use a byte pointer here.
 	// This value may be set to 0 as in the event of an 'SC_INITIALIZE_TX', causing it to not be included in the elastic message.
 	// Using a pointer here helps us because it can differentiate between not set (nil) and set with value 0.
-	Category *byte `json:"category,omitempty"`
+	Category *byte `json:"category,omitempty"` // do not send, if empty!
 
 	//Optional event body fields
 	Source                 string `json:"source,omitempty"`
@@ -275,22 +300,61 @@ func assignTyped[T any](key string, value any, target *T) error {
 	return fmt.Errorf("wrong data type for '%s'. expected %T, got %T", key, zero, value)
 }
 
-func isSpecialSystemTransaction(transactionHash string) (byte, bool, error) {
-	if !strings.HasPrefix(transactionHash, "SC_") {
+func inferCategoryFromTransactionHash(transactionHash string) (byte, bool, error) {
+
+	if len(transactionHash) == 0 { // all good
 		return 0x00, false, nil
 	}
 
-	// Find the last underscore
-	lastUnderscore := strings.LastIndex(transactionHash, "_")
-	if lastUnderscore == -1 {
-		return 0x00, false, fmt.Errorf("cannot find last '_' character in transaction hash which starts with 'SC_' value: %s", transactionHash)
+	err := validateIdentity(transactionHash, true)
+	if err == nil { // all good
+		return 0x00, false, nil
 	}
 
-	prefix := transactionHash[:lastUnderscore]
-	value, ok := sysTransactionMap[prefix]
+	// check for encoded message in transaction hash
+
+	if !strings.HasPrefix(transactionHash, "SC_") { // unknown encoding
+		return 0x00, false, fmt.Errorf("unexpected special hash [%s]", transactionHash)
+	}
+
+	// Find the last underscore
+	lastUnderscore := strings.LastIndex(transactionHash, "_") // find the last underscore to split
+	if lastUnderscore == -1 {
+		return 0x00, false, fmt.Errorf("cannot split special hash [%s]", transactionHash)
+	}
+
+	prefix := transactionHash[:lastUnderscore] // remove postfix
+	value, ok := sysTransactionMap[prefix]     // find known category
 	if !ok {
-		return 0x00, false, fmt.Errorf("unknown special system transaction '%s'", prefix)
+		return 0x00, false, fmt.Errorf("unexpected special event log type [%s]", transactionHash)
 	}
 
 	return value, true, nil
+}
+
+func validateIdentity(digest string, isLowerCase bool) error {
+	id := types.Identity(digest)
+	pubKey, err := id.ToPubKey(isLowerCase)
+	if err != nil {
+		return fmt.Errorf("converting id to pubkey: %w", err)
+	}
+
+	var pubkeyFixed [32]byte
+	copy(pubkeyFixed[:], pubKey[:32])
+	id, err = id.FromPubKey(pubkeyFixed, isLowerCase)
+	if err != nil {
+		return fmt.Errorf("converting pubkey back to id: %w", err)
+	}
+
+	if id.String() != digest {
+		return fmt.Errorf("invalid %s [%s]", If(isLowerCase, "hash", "identity"), digest)
+	}
+	return nil
+}
+
+func If[T any](condition bool, trueValue, falseValue T) T {
+	if condition {
+		return trueValue
+	}
+	return falseValue
 }

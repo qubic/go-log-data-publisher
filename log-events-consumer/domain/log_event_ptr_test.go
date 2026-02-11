@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLogEventPtr_ToLogEvent_Validation(t *testing.T) {
@@ -144,4 +147,30 @@ func TestLogEventPtr_ToLogEvent_OptionalFields(t *testing.T) {
 	if le.Body["foo"] != "bar" {
 		t.Errorf("Expected body['foo'] = 'bar', got %v", le.Body["foo"])
 	}
+}
+
+func TestLogEventPtr_ToLogEvent_InvalidZeroFields(t *testing.T) {
+	jsonInput := `{
+				"epoch": 0,
+				"tickNumber": 0,
+				"logId": 0,
+				"timestamp": 0,
+				"logDigest": "",
+				"index": 0,
+				"type": 0,
+				"emittingContractIndex": 0
+			}`
+
+	var lep LogEventPtr
+	err := json.Unmarshal([]byte(jsonInput), &lep)
+	require.NoError(t, err)
+
+	_, err = lep.ToLogEvent()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "zero value field(s)")
+	assert.Contains(t, err.Error(), "epoch")
+	assert.Contains(t, err.Error(), "tickNumber")
+	assert.Contains(t, err.Error(), "logId")
+	assert.Contains(t, err.Error(), "logDigest")
+	assert.Contains(t, err.Error(), "timestamp")
 }

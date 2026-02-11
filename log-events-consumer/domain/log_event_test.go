@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+const validTxHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib"
+
 func TestLogEventToElastic_AllFields(t *testing.T) {
 	logEvent := LogEvent{
 		Epoch:                 100,
@@ -14,9 +16,10 @@ func TestLogEventToElastic_AllFields(t *testing.T) {
 		EmittingContractIndex: 5,
 		LogId:                 400,
 		LogDigest:             "abcd1234",
-		TransactionHash:       "hash123",
-		Timestamp:             1234567890,
-		BodySize:              50,
+		//TransactionHash:       "ohdjqzrwjlugzbzmmqswdxkqapgafkeokblkmjmrdexmcazkfxxmgpveqqik",
+		TransactionHash: validTxHash,
+		Timestamp:       1234567890,
+		BodySize:        50,
 		Body: map[string]any{
 			"source":                 "SOURCEADDRESS",
 			"destination":            "DESTADDRESS",
@@ -52,7 +55,7 @@ func TestLogEventToElastic_AllFields(t *testing.T) {
 	if result.EmittingContractIndex != 5 {
 		t.Errorf("expected EmittingContractIndex=5, got %d", result.EmittingContractIndex)
 	}
-	if result.TransactionHash != "hash123" {
+	if result.TransactionHash != validTxHash {
 		t.Errorf("expected TransactionHash=hash123, got %s", result.TransactionHash)
 	}
 	if result.LogId != 400 {
@@ -136,7 +139,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"tickNumber":            float64(200),
 				"timestamp":             float64(1234567890),
 				"emittingContractIndex": float64(5),
-				"transactionHash":       "hash123",
+				"transactionHash":       validTxHash,
 				"logId":                 float64(400),
 				"logDigest":             "abcd1234",
 				"type":                  float64(1),
@@ -159,7 +162,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"tickNumber":            float64(200),
 				"timestamp":             float64(1234567890),
 				"emittingContractIndex": float64(5),
-				"transactionHash":       "hash123",
+				"transactionHash":       validTxHash,
 				"logId":                 float64(400),
 				"logDigest":             "abcd1234",
 				"type":                  float64(1),
@@ -184,7 +187,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"tickNumber":            float64(200),
 				"timestamp":             float64(1234567890),
 				"emittingContractIndex": float64(5),
-				"transactionHash":       "hash123",
+				"transactionHash":       validTxHash,
 				"logId":                 float64(400),
 				"logDigest":             "abcd1234",
 				"type":                  float64(1),
@@ -206,7 +209,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"tickNumber":            float64(200),
 				"timestamp":             float64(1234567890),
 				"emittingContractIndex": float64(5),
-				"transactionHash":       "hash123",
+				"transactionHash":       validTxHash,
 				"logId":                 float64(400),
 				"logDigest":             "abcd1234",
 				"type":                  float64(1),
@@ -230,7 +233,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				"tickNumber":             float64(200),
 				"timestamp":              float64(1234567890),
 				"emittingContractIndex":  float64(5),
-				"transactionHash":        "hash123",
+				"transactionHash":        validTxHash,
 				"logId":                  float64(400),
 				"logDigest":              "abcd1234",
 				"type":                   float64(1),
@@ -256,7 +259,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 				EmittingContractIndex: 5,
 				LogId:                 400,
 				LogDigest:             "abcd1234",
-				TransactionHash:       "hash123",
+				TransactionHash:       validTxHash,
 				Timestamp:             1234567890,
 				BodySize:              50,
 				Body:                  tt.body,
@@ -796,37 +799,37 @@ func TestLogEventToElastic_SpecialSystemTransactions(t *testing.T) {
 		{
 			name:                "SC_INITIALIZE_TX with tick suffix",
 			transactionHash:     "SC_INITIALIZE_TX_12345",
-			expectedCategory:    0x00,
+			expectedCategory:    1,
 			expectedTxHashEmpty: true,
 		},
 		{
 			name:                "SC_BEGIN_EPOCH_TX with tick suffix",
 			transactionHash:     "SC_BEGIN_EPOCH_TX_67890",
-			expectedCategory:    0x01,
+			expectedCategory:    2,
 			expectedTxHashEmpty: true,
 		},
 		{
 			name:                "SC_BEGIN_TICK_TX with tick suffix",
 			transactionHash:     "SC_BEGIN_TICK_TX_11111",
-			expectedCategory:    0x02,
+			expectedCategory:    3,
 			expectedTxHashEmpty: true,
 		},
 		{
 			name:                "SC_END_TICK_TX with tick suffix",
 			transactionHash:     "SC_END_TICK_TX_22222",
-			expectedCategory:    0x03,
+			expectedCategory:    4,
 			expectedTxHashEmpty: true,
 		},
 		{
 			name:                "SC_END_EPOCH_TX with tick suffix",
 			transactionHash:     "SC_END_EPOCH_TX_33333",
-			expectedCategory:    0x04,
+			expectedCategory:    5,
 			expectedTxHashEmpty: true,
 		},
 		{
 			name:                "SC_NOTIFICATION_TX with tick suffix",
 			transactionHash:     "SC_NOTIFICATION_TX_44444",
-			expectedCategory:    0x05,
+			expectedCategory:    6,
 			expectedTxHashEmpty: true,
 		},
 	}
@@ -875,12 +878,12 @@ func TestLogEventToElastic_SpecialTransactionJSON(t *testing.T) {
 		{
 			name:             "SC_INITIALIZE_TX category 0 included in JSON",
 			transactionHash:  "SC_INITIALIZE_TX_12345",
-			expectedCategory: 0x00,
+			expectedCategory: 1,
 		},
 		{
 			name:             "SC_END_TICK_TX category 3 included in JSON",
 			transactionHash:  "SC_END_TICK_TX_67890",
-			expectedCategory: 0x03,
+			expectedCategory: 4,
 		},
 	}
 
@@ -950,7 +953,7 @@ func TestLogEventToElastic_UnknownSpecialTransaction(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown special transaction, got nil")
 	}
-	expectedMsg := "unknown special system transaction 'SC_UNKNOWN_TX'"
+	expectedMsg := "SC_UNKNOWN_TX"
 	if !contains(err.Error(), expectedMsg) {
 		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
 	}
@@ -965,12 +968,12 @@ func TestLogEventToElastic_MalformedSpecialTransaction(t *testing.T) {
 		{
 			name:            "SC_ prefix but missing underscore after",
 			transactionHash: "SC_ENDTICK",
-			expectedErrMsg:  "unknown special system transaction 'SC'",
+			expectedErrMsg:  "unexpected special event log type [SC_ENDTICK]",
 		},
 		{
 			name:            "SC_ only",
 			transactionHash: "SC_",
-			expectedErrMsg:  "unknown special system transaction 'SC'",
+			expectedErrMsg:  "unexpected special event log type [SC_]",
 		},
 	}
 
@@ -1024,7 +1027,7 @@ func TestLogEventToElastic_TypeOverflow(t *testing.T) {
 				Epoch:           100,
 				TickNumber:      200,
 				Type:            tt.typeValue,
-				TransactionHash: "hash123",
+				TransactionHash: validTxHash,
 				Body:            map[string]any{},
 			}
 
@@ -1048,7 +1051,8 @@ func TestLogEventToElastic_TypeOverflow(t *testing.T) {
 
 func TestIsSpecialSystemTransaction(t *testing.T) {
 	tests := []struct {
-		name              string
+		name string
+
 		transactionHash   string
 		expectedCategory  byte
 		expectedIsSpecial bool
@@ -1057,7 +1061,7 @@ func TestIsSpecialSystemTransaction(t *testing.T) {
 	}{
 		{
 			name:              "regular transaction hash",
-			transactionHash:   "abcd1234hash",
+			transactionHash:   validTxHash,
 			expectedCategory:  0x00,
 			expectedIsSpecial: false,
 			expectError:       false,
@@ -1065,43 +1069,43 @@ func TestIsSpecialSystemTransaction(t *testing.T) {
 		{
 			name:              "SC_END_TICK_TX with suffix",
 			transactionHash:   "SC_END_TICK_TX_12345",
-			expectedCategory:  0x03,
+			expectedCategory:  4,
 			expectedIsSpecial: true,
 			expectError:       false,
 		},
 		{
 			name:              "SC_INITIALIZE_TX with suffix",
 			transactionHash:   "SC_INITIALIZE_TX_67890",
-			expectedCategory:  0x00,
+			expectedCategory:  1,
 			expectedIsSpecial: true,
 			expectError:       false,
 		},
 		{
 			name:             "unknown SC_ transaction",
 			transactionHash:  "SC_INVALID_TX_12345",
-			expectedCategory: 0x00,
+			expectedCategory: 1,
 			expectError:      true,
-			errorMsg:         "unknown special system transaction 'SC_INVALID_TX'",
+			errorMsg:         "unexpected special event log type [SC_INVALID_TX_12345]",
 		},
 		{
 			name:             "SC_ with no underscore after prefix",
 			transactionHash:  "SC_ENDTICK",
-			expectedCategory: 0x00,
+			expectedCategory: 1,
 			expectError:      true,
-			errorMsg:         "unknown special system transaction 'SC'",
+			errorMsg:         "unexpected special event log type [SC_ENDTICK]",
 		},
 		{
 			name:             "SC_ only",
 			transactionHash:  "SC_",
-			expectedCategory: 0x00,
+			expectedCategory: 1,
 			expectError:      true,
-			errorMsg:         "unknown special system transaction 'SC'",
+			errorMsg:         "unexpected special event log type [SC_]",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			category, isSpecial, err := isSpecialSystemTransaction(tt.transactionHash)
+			category, isSpecial, err := inferCategoryFromTransactionHash(tt.transactionHash)
 
 			if tt.expectError {
 				if err == nil {

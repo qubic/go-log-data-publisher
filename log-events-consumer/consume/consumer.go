@@ -85,12 +85,12 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		logEvent, err := raw.ToLogEvent()
 		if err != nil {
-			return -1, fmt.Errorf("validating and converting to log event: %w", err)
+			return -1, fmt.Errorf("converting to log event: %w", err)
 		}
 
 		logEventElastic, err := logEvent.ToLogEventElastic()
 		if err != nil {
-			return -1, fmt.Errorf("converting log event to elastic format [%s]: %w", string(record.Value), err)
+			return -1, fmt.Errorf("converting to elastic format [%s]: %w", string(record.Value), err)
 		}
 
 		// TODO validate converted events (error)
