@@ -23,17 +23,17 @@ func TestLogEventToElastic_AllFields(t *testing.T) {
 		Body: map[string]any{
 			"source":                 "SOURCEADDRESS",
 			"destination":            "DESTADDRESS",
-			"amount":                 int64(1000),
+			"amount":                 float64(1000),
 			"assetName":              "TESTASSET",
 			"assetIssuer":            "ISSUERADDRESS",
-			"numberOfShares":         int64(500),
-			"managingContractIndex":  int64(10),
+			"numberOfShares":         float64(500),
+			"managingContractIndex":  float64(10),
 			"unitOfMeasurement":      "1234567",
 			"numberOfDecimalPlaces":  float64(8),
-			"deductedAmount":         uint64(100),
-			"remainingAmount":        int64(900),
-			"contractIndex":          uint32(15),
-			"contractIndexBurnedFor": uint32(20),
+			"deductedAmount":         float64(100),
+			"remainingAmount":        float64(900),
+			"contractIndex":          float64(15),
+			"contractIndexBurnedFor": float64(20),
 		},
 	}
 
@@ -155,7 +155,7 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 		{
 			name: "only amount field",
 			body: map[string]any{
-				"amount": int64(5000),
+				"amount": float64(5000),
 			},
 			expectedJSON: map[string]any{
 				"epoch":                 float64(100),
@@ -179,8 +179,8 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 			body: map[string]any{
 				"assetName":             "MYASSET",
 				"assetIssuer":           "ISSUER",
-				"numberOfShares":        int64(1000),
-				"managingContractIndex": int64(3),
+				"numberOfShares":        float64(1000),
+				"managingContractIndex": float64(3),
 			},
 			expectedJSON: map[string]any{
 				"epoch":                 float64(100),
@@ -223,10 +223,10 @@ func TestLogEventToElastic_OmitEmptyFields(t *testing.T) {
 		{
 			name: "contract related fields",
 			body: map[string]any{
-				"contractIndex":          uint32(7),
-				"contractIndexBurnedFor": uint32(9),
-				"deductedAmount":         uint64(250),
-				"remainingAmount":        int64(750),
+				"contractIndex":          float64(7),
+				"contractIndexBurnedFor": float64(9),
+				"deductedAmount":         float64(250),
+				"remainingAmount":        float64(750),
 			},
 			expectedJSON: map[string]any{
 				"epoch":                  float64(100),
@@ -309,8 +309,11 @@ func TestLogEventToElastic_NegativeAmountError(t *testing.T) {
 	logEvent := LogEvent{
 		Epoch:      100,
 		TickNumber: 200,
+		LogId:      400,
+		Timestamp:  500,
+		LogDigest:  "foo",
 		Body: map[string]any{
-			"amount": int64(-100),
+			"amount": float64(-100),
 		},
 	}
 
@@ -318,7 +321,7 @@ func TestLogEventToElastic_NegativeAmountError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for negative amount, got nil")
 	}
-	expectedMsg := "amount cannot be negative"
+	expectedMsg := "must be a non-negative whole number"
 	if !contains(err.Error(), expectedMsg) {
 		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
 	}
@@ -328,8 +331,11 @@ func TestLogEventToElastic_NegativeNumberOfSharesError(t *testing.T) {
 	logEvent := LogEvent{
 		Epoch:      100,
 		TickNumber: 200,
+		LogId:      400,
+		Timestamp:  500,
+		LogDigest:  "foo",
 		Body: map[string]any{
-			"numberOfShares": int64(-50),
+			"numberOfShares": float64(-50),
 		},
 	}
 
@@ -337,7 +343,7 @@ func TestLogEventToElastic_NegativeNumberOfSharesError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for negative numberOfShares, got nil")
 	}
-	expectedMsg := "numberOfShares cannot be negative"
+	expectedMsg := "must be a non-negative whole number"
 	if !contains(err.Error(), expectedMsg) {
 		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
 	}
@@ -347,8 +353,11 @@ func TestLogEventToElastic_NegativeManagingContractIndexError(t *testing.T) {
 	logEvent := LogEvent{
 		Epoch:      100,
 		TickNumber: 200,
+		LogId:      400,
+		Timestamp:  500,
+		LogDigest:  "foo",
 		Body: map[string]any{
-			"managingContractIndex": int64(-5),
+			"managingContractIndex": float64(-5),
 		},
 	}
 
@@ -356,7 +365,7 @@ func TestLogEventToElastic_NegativeManagingContractIndexError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for negative managingContractIndex, got nil")
 	}
-	expectedMsg := "managingContractIndex cannot be negative"
+	expectedMsg := "must be a non-negative whole number"
 	if !contains(err.Error(), expectedMsg) {
 		t.Errorf("expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
 	}
@@ -399,6 +408,9 @@ func TestLogEventToElastic_UnitOfMeasurementValidation(t *testing.T) {
 			logEvent := LogEvent{
 				Epoch:      100,
 				TickNumber: 200,
+				LogId:      400,
+				Timestamp:  500,
+				LogDigest:  "foo",
 				Body: map[string]any{
 					"unitOfMeasurement": tt.value,
 				},
@@ -474,6 +486,9 @@ func TestLogEventToElastic_NumberOfDecimalPlacesValidation(t *testing.T) {
 			logEvent := LogEvent{
 				Epoch:      100,
 				TickNumber: 200,
+				LogId:      400,
+				Timestamp:  500,
+				LogDigest:  "foo",
 				Body: map[string]any{
 					"numberOfDecimalPlaces": tt.value,
 				},
@@ -500,6 +515,9 @@ func TestLogEventToElastic_UnknownBodyKey(t *testing.T) {
 	logEvent := LogEvent{
 		Epoch:      100,
 		TickNumber: 200,
+		LogId:      400,
+		Timestamp:  500,
+		LogDigest:  "foo",
 		Body: map[string]any{
 			"unknownField": "someValue",
 		},
@@ -559,6 +577,9 @@ func TestLogEventToElastic_WrongDataType(t *testing.T) {
 			logEvent := LogEvent{
 				Epoch:      100,
 				TickNumber: 200,
+				LogId:      400,
+				Timestamp:  500,
+				LogDigest:  "foo",
 				Body: map[string]any{
 					tt.key: tt.value,
 				},
@@ -944,6 +965,9 @@ func TestLogEventToElastic_UnknownSpecialTransaction(t *testing.T) {
 	logEvent := LogEvent{
 		Epoch:           100,
 		TickNumber:      200,
+		LogId:           400,
+		Timestamp:       500,
+		LogDigest:       "foo",
 		Type:            1,
 		TransactionHash: "SC_UNKNOWN_TX_12345",
 		Body:            map[string]any{},
@@ -983,6 +1007,9 @@ func TestLogEventToElastic_MalformedSpecialTransaction(t *testing.T) {
 				Epoch:           100,
 				TickNumber:      200,
 				Type:            1,
+				LogId:           400,
+				Timestamp:       500,
+				LogDigest:       "foo",
 				TransactionHash: tt.transactionHash,
 				Body:            map[string]any{},
 			}
@@ -1026,6 +1053,9 @@ func TestLogEventToElastic_TypeOverflow(t *testing.T) {
 			logEvent := LogEvent{
 				Epoch:           100,
 				TickNumber:      200,
+				LogId:           400,
+				Timestamp:       500,
+				LogDigest:       "foo",
 				Type:            tt.typeValue,
 				TransactionHash: validTxHash,
 				Body:            map[string]any{},
@@ -1141,4 +1171,69 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+func TestLogEvent_IsSupported(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType int16
+		amount    uint64
+		want      bool
+	}{
+		{
+			name:      "Type 0 with positive amount is supported",
+			eventType: 0,
+			amount:    1,
+			want:      true,
+		},
+		{
+			name:      "Type 0 with amount 0 is not supported",
+			eventType: 0,
+			amount:    0,
+			want:      false,
+		},
+		{
+			name:      "Type 1 is supported",
+			eventType: 1,
+			want:      true,
+		},
+		{
+			name:      "Type 2 is supported",
+			eventType: 2,
+			want:      true,
+		},
+		{
+			name:      "Type 3 is supported",
+			eventType: 3,
+			want:      true,
+		},
+		{
+			name:      "Type 8 is supported",
+			eventType: 8,
+			want:      true,
+		},
+		{
+			name:      "Type 13 is supported",
+			eventType: 13,
+			want:      true,
+		},
+		{
+			name:      "Type 4 is not supported",
+			eventType: 4,
+			want:      false,
+		},
+		{
+			name:      "Type 100 is not supported",
+			eventType: 100,
+			want:      false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			le := &LogEventElastic{Type: tt.eventType, Amount: tt.amount}
+			if got := le.IsSupported(); got != tt.want {
+				t.Errorf("IsSupported() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

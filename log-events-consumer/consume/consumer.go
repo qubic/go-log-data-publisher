@@ -94,12 +94,9 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			return -1, fmt.Errorf("converting to elastic format [%s]: %w", string(record.Value), err)
 		}
 
-		// TODO validate converted events (error)
+		// TODO error on conversion in case of problems
 
-		// TODO filter unwanted events
-
-		// Skip sending to elastic log events which are regular QU transfers with no amount.
-		if logEventElastic.Type == 0 && logEventElastic.ContractIndex == 0 && logEventElastic.Amount == 0 {
+		if !logEventElastic.IsSupported() {
 			continue
 		}
 

@@ -589,6 +589,119 @@ func contains(s, substr string) bool {
 	return len(s) >= len(substr) && indexOf(s, substr) >= 0
 }
 
+func TestConsumeBatch_IsSupportedFiltering(t *testing.T) {
+	tests := []struct {
+		name         string
+		eventType    uint32
+		shouldFilter bool
+	}{
+		{
+			name:         "Type 0 is supported",
+			eventType:    0,
+			shouldFilter: false,
+		},
+		{
+			name:         "Type 3 is supported",
+			eventType:    3,
+			shouldFilter: false,
+		},
+		{
+			name:         "Type 8 is supported",
+			eventType:    8,
+			shouldFilter: false,
+		},
+		{
+			name:         "Type 13 is supported",
+			eventType:    13,
+			shouldFilter: false,
+		},
+		{
+			name:         "Type 4 is NOT supported",
+			eventType:    4,
+			shouldFilter: true,
+		},
+		{
+			name:         "Type 100 is NOT supported",
+			eventType:    100,
+			shouldFilter: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logEvent := domain.LogEvent{
+				Epoch:                 100,
+				TickNumber:            1000,
+				Type:                  tt.eventType,
+				EmittingContractIndex: 1, // Use non-zero to avoid Type=0 filter
+				LogId:                 12345,
+				LogDigest:             "test-digest",
+				TransactionHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
+				Timestamp:             1704067200,
+				Body:                  map[string]any{"amount": float64(100)},
+				Index:                 1,
+			}
+
+			logEventJSON, _ := json.Marshal(logEvent)
+
+			mockKafka := &mockKafkaClient{
+				pollRecordsFunc: func(ctx context.Context, maxPollRecords int) kgo.Fetches {
+					record := &kgo.Record{
+						Value: logEventJSON,
+					}
+					return kgo.Fetches{
+						{
+							Topics: []kgo.FetchTopic{
+								{
+									Topic: "test-topic",
+									Partitions: []kgo.FetchPartition{
+										{
+											Partition: 0,
+											Records:   []*kgo.Record{record},
+										},
+									},
+								},
+							},
+						},
+					}
+				},
+			}
+
+			var indexedDocs []*elastic.EsDocument
+			mockElastic := &mockElasticClient{
+				bulkIndexFunc: func(ctx context.Context, data []*elastic.EsDocument) error {
+					indexedDocs = data
+					return nil
+				},
+			}
+
+			m := metrics.NewMetrics("test_supported_filter_" + tt.name)
+			consumer := NewConsumer(mockKafka, mockElastic, m)
+
+			count, err := consumer.consumeBatch(context.Background())
+			if err != nil {
+				t.Fatalf("Expected no error, got: %v", err)
+			}
+
+			if tt.shouldFilter {
+				if count != 0 {
+					t.Errorf("Expected count 0 (filtered), got: %d", count)
+				}
+				if len(indexedDocs) != 0 {
+					t.Errorf("Expected 0 documents indexed, got: %d", len(indexedDocs))
+				}
+			} else {
+				if count != 1 {
+					t.Errorf("Expected count 1 (not filtered), got: %d", count)
+				}
+				if len(indexedDocs) != 1 {
+					t.Errorf("Expected 1 document indexed, got: %d", len(indexedDocs))
+				}
+			}
+		})
+	}
+}
+
 func indexOf(s, substr string) int {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
@@ -666,39 +779,39 @@ func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 
 func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
 	tests := []struct {
-		name          string
-		typ           uint32
-		contractIndex uint32
-		amount        uint64
-		shouldFilter  bool
+		name                  string
+		typ                   uint32
+		emittingContractIndex uint32
+		amount                uint64
+		shouldFilter          bool
 	}{
 		{
-			name:          "Type non-zero, should not filter",
-			typ:           1,
-			contractIndex: 0,
-			amount:        0,
-			shouldFilter:  false,
+			name:                  "Type non-zero, should not filter",
+			typ:                   1,
+			emittingContractIndex: 0,
+			amount:                0,
+			shouldFilter:          false,
 		},
 		{
-			name:          "ContractIndex non-zero, should not filter",
-			typ:           0,
-			contractIndex: 1,
-			amount:        0,
-			shouldFilter:  false,
+			name:                  "EmittingContractIndex non-zero, should not filter",
+			typ:                   0,
+			emittingContractIndex: 1,
+			amount:                0,
+			shouldFilter:          false,
 		},
 		{
-			name:          "Amount non-zero, should not filter",
-			typ:           0,
-			contractIndex: 0,
-			amount:        100,
-			shouldFilter:  false,
+			name:                  "Amount non-zero, should not filter",
+			typ:                   0,
+			emittingContractIndex: 0,
+			amount:                100,
+			shouldFilter:          false,
 		},
 		{
-			name:          "All zero, should filter",
-			typ:           0,
-			contractIndex: 0,
-			amount:        0,
-			shouldFilter:  true,
+			name:                  "All zero, should filter",
+			typ:                   0,
+			emittingContractIndex: 0,
+			amount:                0,
+			shouldFilter:          true,
 		},
 	}
 
@@ -708,19 +821,17 @@ func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
 			if tt.amount > 0 {
 				body["amount"] = float64(tt.amount)
 			}
-			if tt.contractIndex > 0 {
-				body["contractIndex"] = float64(tt.contractIndex)
-			}
 
 			logEvent := domain.LogEvent{
-				Epoch:           100,
-				TickNumber:      1000,
-				Type:            tt.typ,
-				LogId:           12345,
-				LogDigest:       "test-digest",
-				TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
-				Timestamp:       1704067200,
-				Body:            body,
+				Epoch:                 100,
+				TickNumber:            1000,
+				EmittingContractIndex: tt.emittingContractIndex,
+				Type:                  tt.typ,
+				LogId:                 12345,
+				LogDigest:             "test-digest",
+				TransactionHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
+				Timestamp:             1704067200,
+				Body:                  body,
 			}
 
 			logEventJSON, _ := json.Marshal(logEvent)

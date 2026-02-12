@@ -21,6 +21,15 @@ var sysTransactionMap = map[string]uint8{
 	"SC_NOTIFICATION_TX": 6,
 }
 
+var supportedLogEventTypes = map[int16]struct{}{
+	0:  {}, // qu transfer
+	1:  {}, // asset issuance
+	2:  {}, // asset ownership change
+	3:  {}, // asset possession change
+	8:  {}, // burn
+	13: {}, // contract reserve deduction
+}
+
 type LogEvent struct {
 	Epoch                 uint32         `json:"epoch"`
 	TickNumber            uint32         `json:"tickNumber"`
@@ -132,13 +141,20 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 	}, nil
 }
 
+func (le *LogEventElastic) IsSupported() bool {
+	_, ok := supportedLogEventTypes[le.Type]
+	// qu transfer with zero amount is not supported
+	ok = ok && !(le.Type == 0 && le.EmittingContractIndex == 0 && le.Amount == 0)
+	return ok
+}
+
 func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 
 	if le.Type > 32767 {
 		return LogEventElastic{}, fmt.Errorf("type value %d exceeds int16 maximum of 32767", le.Type)
 	}
 
-	logEventElastic := LogEventElastic{
+	lee := LogEventElastic{
 		Epoch:                 le.Epoch,
 		TickNumber:            le.TickNumber,
 		Timestamp:             le.Timestamp,
@@ -149,14 +165,44 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		Type:                  int16(le.Type),
 	}
 
-	eventLogCategory, isSpecialEventLog, err := inferCategoryFromTransactionHash(logEventElastic.TransactionHash)
+	// checking here again might be a bit paranoid
+	invalid := make([]string, 0, 6)
+	if lee.Epoch == 0 {
+		invalid = append(invalid, "epoch")
+	}
+	if lee.TickNumber == 0 {
+		invalid = append(invalid, "tickNumber")
+	}
+	if lee.LogId == 0 {
+		invalid = append(invalid, "logId")
+	}
+	if lee.Timestamp == 0 {
+		invalid = append(invalid, "timestamp")
+	}
+	if lee.LogDigest == "" {
+		invalid = append(invalid, "logDigest")
+	}
+	if len(invalid) > 0 {
+		return LogEventElastic{}, fmt.Errorf("invalid zero value field(s): %v", invalid)
+	}
+
+	eventLogCategory, isSpecialEventLog, err := inferCategoryFromTransactionHash(lee.TransactionHash)
 	if err != nil {
 		return LogEventElastic{}, fmt.Errorf("checking if transactionHash is special: %w", err)
 	}
 	if isSpecialEventLog {
 		// We want to omit transactionHash field if tx is special, and instead set the category
-		logEventElastic.TransactionHash = ""
-		logEventElastic.Category = &eventLogCategory
+		lee.TransactionHash = ""
+		lee.Category = &eventLogCategory
+	}
+
+	switch {
+	case lee.Type == 0:
+	case lee.Type == 1:
+	case lee.Type == 2:
+	case lee.Type == 3:
+	case lee.Type == 2:
+	case lee.Type == 2:
 	}
 
 	// FIXME convert body values explicitly per type
@@ -164,27 +210,27 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		var err error
 		switch key {
 		case "source":
-			err = assignTyped(key, value, &logEventElastic.Source)
+			err = assignTyped(key, value, &lee.Source)
 		case "destination":
-			err = assignTyped(key, value, &logEventElastic.Destination)
+			err = assignTyped(key, value, &lee.Destination)
 		case "amount":
-			err = assignTyped(key, value, &logEventElastic.Amount)
-			if err == nil && logEventElastic.Amount < 0 {
-				err = fmt.Errorf("amount cannot be negative, got %d", logEventElastic.Amount)
+			err = assignTyped(key, value, &lee.Amount)
+			if err == nil && lee.Amount < 0 {
+				err = fmt.Errorf("amount cannot be negative, got %d", lee.Amount)
 			}
 		case "assetName":
-			err = assignTyped(key, value, &logEventElastic.AssetName)
+			err = assignTyped(key, value, &lee.AssetName)
 		case "assetIssuer":
-			err = assignTyped(key, value, &logEventElastic.AssetIssuer)
+			err = assignTyped(key, value, &lee.AssetIssuer)
 		case "numberOfShares":
-			err = assignTyped(key, value, &logEventElastic.NumberOfShares)
-			if err == nil && logEventElastic.NumberOfShares < 0 {
-				err = fmt.Errorf("numberOfShares cannot be negative, got %d", logEventElastic.NumberOfShares)
+			err = assignTyped(key, value, &lee.NumberOfShares)
+			if err == nil && lee.NumberOfShares < 0 {
+				err = fmt.Errorf("numberOfShares cannot be negative, got %d", lee.NumberOfShares)
 			}
 		case "managingContractIndex":
-			err = assignTyped(key, value, &logEventElastic.ManagingContractIndex)
-			if err == nil && logEventElastic.ManagingContractIndex < 0 {
-				err = fmt.Errorf("managingContractIndex cannot be negative, got %d", logEventElastic.ManagingContractIndex)
+			err = assignTyped(key, value, &lee.ManagingContractIndex)
+			if err == nil && lee.ManagingContractIndex < 0 {
+				err = fmt.Errorf("managingContractIndex cannot be negative, got %d", lee.ManagingContractIndex)
 			}
 		case "unitOfMeasurement":
 			if str, ok := value.(string); ok {
@@ -195,7 +241,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 					for i := 0; i < 7; i++ {
 						bytes[i] = str[i] - 48
 					}
-					logEventElastic.UnitOfMeasurement = bytes
+					lee.UnitOfMeasurement = bytes
 				}
 			} else {
 				err = fmt.Errorf("expected string for unitOfMeasurement, got %T", value)
@@ -208,20 +254,20 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 				} else if num < 0 || num > 255 {
 					err = fmt.Errorf("numberOfDecimalPlaces must be in range 0-255, got %f", num)
 				} else {
-					logEventElastic.NumberOfDecimalPlaces = byte(num)
+					lee.NumberOfDecimalPlaces = byte(num)
 				}
 			} else {
 				err = fmt.Errorf("expected float64 for numberOfDecimalPlaces, got %T", value)
 			}
 
 		case "deductedAmount":
-			err = assignTyped(key, value, &logEventElastic.DeductedAmount)
+			err = assignTyped(key, value, &lee.DeductedAmount)
 		case "remainingAmount":
-			err = assignTyped(key, value, &logEventElastic.RemainingAmount)
+			err = assignTyped(key, value, &lee.RemainingAmount)
 		case "contractIndex":
-			err = assignTyped(key, value, &logEventElastic.ContractIndex)
+			err = assignTyped(key, value, &lee.ContractIndex)
 		case "contractIndexBurnedFor":
-			err = assignTyped(key, value, &logEventElastic.ContractIndexBurnedFor)
+			err = assignTyped(key, value, &lee.ContractIndexBurnedFor)
 		default:
 			err = fmt.Errorf("unknown body key '%s', type: %T, value: %v", key, value, value)
 		}
@@ -229,7 +275,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 			return LogEventElastic{}, fmt.Errorf("converting body field to proper type: %w", err)
 		}
 	}
-	return logEventElastic, nil
+	return lee, nil
 }
 
 type LogEventElastic struct {
@@ -240,28 +286,26 @@ type LogEventElastic struct {
 	TransactionHash       string `json:"transactionHash,omitempty"` // do not send, if empty!
 	LogId                 uint64 `json:"logId"`
 	LogDigest             string `json:"logDigest"`
-	Type                  int16  `json:"type"`
+	Type                  int16  `json:"type"` // short in elastic
 	// This value is meant to be included in the message only if the transactionHash starts with one of the strings in
 	// the sysTransactionMap map. In this event, transactionHash should no longer be included.
-	// Important to use a byte pointer here.
-	// This value may be set to 0 as in the event of an 'SC_INITIALIZE_TX', causing it to not be included in the elastic message.
-	// Using a pointer here helps us because it can differentiate between not set (nil) and set with value 0.
-	Category *byte `json:"category,omitempty"` // do not send, if empty!
+	// We use a pointer so that we can omit sending an (empty) value.
+	Category *uint8 `json:"category,omitempty"` // do not send, if empty!
 
 	//Optional event body fields
 	Source                 string `json:"source,omitempty"`
 	Destination            string `json:"destination,omitempty"`
-	Amount                 int64  `json:"amount,omitempty"`
+	Amount                 uint64 `json:"amount,omitempty"`
 	AssetName              string `json:"assetName,omitempty"`
 	AssetIssuer            string `json:"assetIssuer,omitempty"`
-	NumberOfShares         int64  `json:"numberOfShares,omitempty"`
-	ManagingContractIndex  int64  `json:"managingContractIndex,omitempty"`
+	NumberOfShares         uint64 `json:"numberOfShares,omitempty"`
+	ManagingContractIndex  uint64 `json:"managingContractIndex,omitempty"`
 	UnitOfMeasurement      []byte `json:"unitOfMeasurement,omitempty"`
 	NumberOfDecimalPlaces  byte   `json:"numberOfDecimalPlaces,omitempty"`
 	DeductedAmount         uint64 `json:"deductedAmount,omitempty"`
 	RemainingAmount        int64  `json:"remainingAmount,omitempty"`
-	ContractIndex          uint32 `json:"contractIndex,omitempty"`
-	ContractIndexBurnedFor uint32 `json:"contractIndexBurnedFor,omitempty"`
+	ContractIndex          uint64 `json:"contractIndex,omitempty"`
+	ContractIndexBurnedFor uint64 `json:"contractIndexBurnedFor,omitempty"`
 }
 
 func assignTyped[T any](key string, value any, target *T) error {
@@ -297,7 +341,7 @@ func assignTyped[T any](key string, value any, target *T) error {
 	}
 
 	var zero T
-	return fmt.Errorf("wrong data type for '%s'. expected %T, got %T", key, zero, value)
+	return fmt.Errorf("wrong data type for '%s'. expected %T, got %T", key, zero, value) // unexpected type
 }
 
 func inferCategoryFromTransactionHash(transactionHash string) (byte, bool, error) {
