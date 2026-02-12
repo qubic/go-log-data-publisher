@@ -2,9 +2,9 @@ package domain
 
 import (
 	"encoding/json"
-	"os"
 	"testing"
 
+	"github.com/qubic/log-events-consumer/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +54,7 @@ func TestLogEvent_Integration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.filename, func(t *testing.T) {
 			// 1. Read the input file
-			data, err := os.ReadFile(tt.filename)
+			data, err := testutils.ReadTestFile(tt.filename)
 			require.NoError(t, err)
 
 			// 2. unmarshallLogEvent(record, &raw)
@@ -75,7 +75,7 @@ func TestLogEvent_Integration(t *testing.T) {
 			require.NoError(t, err)
 
 			// 6. Read the expected output file
-			expectedJSON, err := os.ReadFile(tt.expected)
+			expectedJSON, err := testutils.ReadTestFile(tt.expected)
 			require.NoError(t, err)
 
 			// 7. verify the output against json

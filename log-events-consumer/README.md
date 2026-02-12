@@ -46,3 +46,14 @@ ENVIRONMENT
   QUBIC_LOG_EVENTS_CONSUMER_METRICS_NAMESPACE         <string>              (default: qubic_kafka)             
   QUBIC_LOG_EVENTS_CONSUMER_METRICS_PORT              <int>                 (default: 9999)  
 ```
+
+## Tests
+
+The shared test data is located in `testutils/testdata/` and includes:
+- `kafka/`: Input JSON files from Kafka.
+- `elastic/`: Expected output JSON files for Elasticsearch.
+- `filtered/`: Input JSON files that should be filtered out.
+
+The `testutils` package manages access to this data using `//go:embed`.
+
+The integration tests in `domain/kafka_to_elastic_serialization_test.go` and `consume/consume_batch_integration_test.go` use these files to verify the full conversion and consumption pipeline.
