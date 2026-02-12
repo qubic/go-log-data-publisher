@@ -1,0 +1,15 @@
+{
+  "epoch": 199,
+  "tickNumber": 43849002,
+  "timestamp": 1770793227,
+  "emittingContractIndex": 0,
+  "transactionHash": "mdjpvxkmgljjfeskpiedvgdlgniesgiwgtmdvyhymaeeldzypwdwprpeuwed",
+  "logId": 7783883,
+  "logDigest": "216bbe5171cafb78",
+  "type": 2,
+  "source": "BDSEQVHDWENCDACLLMEPWHTDJPGDSDGTODHPYNMRPDHKTOAXFKSPRYGEXEOF",
+  "destination": "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+  "assetName": "QFT",
+  "assetIssuer": "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+  "numberOfShares": 2
+}

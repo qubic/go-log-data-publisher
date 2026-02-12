@@ -222,7 +222,7 @@ func handleAssetIssuance(lee *LogEventElastic, body map[string]any) error {
 		return fmt.Errorf("converting managing contract index: %w", err)
 	}
 
-	ndp, ok := body["numberDecimalPlaces"].(float64)
+	ndp, ok := body["numberOfDecimalPlaces"].(float64)
 	if !ok {
 		return fmt.Errorf("missing or invalid number of decimal places")
 	}

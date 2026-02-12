@@ -667,7 +667,7 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 					"amount":                 float64(100),
 					"numberOfShares":         float64(101),
 					"managingContractIndex":  float64(102),
-					"numberDecimalPlaces":    float64(103),
+					"numberOfDecimalPlaces":  float64(103),
 					"unitOfMeasurement":      "0000000",
 					"contractIndexBurnedFor": float64(104),
 					"contractIndex":          float64(105),

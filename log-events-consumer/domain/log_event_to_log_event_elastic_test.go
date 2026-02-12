@@ -292,7 +292,7 @@ func TestLogEvent_ToLogEventElastic_AssetIssuance_Success(t *testing.T) {
 			"assetIssuer":           "issuer-identity",
 			"assetName":             "QUBIC",
 			"managingContractIndex": 10.0,
-			"numberDecimalPlaces":   2.0,
+			"numberOfDecimalPlaces": 2.0,
 			"numberOfShares":        1000000.0,
 			"unitOfMeasurement":     "1234567",
 		},
@@ -322,7 +322,7 @@ func TestLogEvent_ToLogEventElastic_AssetIssuance_Error(t *testing.T) {
 		Body: map[string]any{
 			"assetName":             "QUBIC",
 			"managingContractIndex": 10.0,
-			"numberDecimalPlaces":   2.0,
+			"numberOfDecimalPlaces": 2.0,
 			"numberOfShares":        1000000.0,
 			"unitOfMeasurement":     "1234567",
 		},
