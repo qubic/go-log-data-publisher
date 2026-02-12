@@ -89,13 +89,17 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			return -1, fmt.Errorf("converting to log event: %w", err)
 		}
 
+		// basic filters before elastic conversion
+		if !logEvent.IsSupported() {
+			continue
+		}
+
 		logEventElastic, err := logEvent.ToLogEventElastic()
 		if err != nil {
 			return -1, fmt.Errorf("converting to elastic format [%s]: %w", string(record.Value), err)
 		}
 
-		// TODO error on conversion in case of problems
-
+		// filter event logs that need conversion
 		if !logEventElastic.IsSupported() {
 			continue
 		}
@@ -116,8 +120,8 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			Payload: val,
 		})
 
-		if logEvent.TickNumber > c.currentTick {
-			c.currentTick = logEvent.TickNumber
+		if uint32(logEvent.TickNumber) > c.currentTick {
+			c.currentTick = uint32(logEvent.TickNumber)
 			c.currentEpoch = logEvent.Epoch
 		}
 		c.consumeMetrics.IncProcessedMessages()

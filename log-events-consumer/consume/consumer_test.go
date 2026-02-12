@@ -52,8 +52,8 @@ func TestConsumeBatch_Success(t *testing.T) {
 		"epoch": 100,
 		"tickNumber": 1000,
 		"index": 1,
-		"type": 1,
-		"emittingContractIndex": 5,
+		"type": 0,
+		"emittingContractIndex": 0,
 		"logId": 12345,
 		"logDigest": "test-digest",
 		"transactionHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
@@ -375,22 +375,30 @@ func TestConsumeBatch_MultipleRecords(t *testing.T) {
 	logEvent1 := domain.LogEvent{
 		Epoch:           100,
 		TickNumber:      1000,
-		Type:            1, // Non-zero to avoid filtering
+		Type:            0,
 		LogId:           1,
 		LogDigest:       "digest1",
 		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:       1704067200,
-		Body:            map[string]any{},
+		Body: map[string]any{
+			"source":      "TEST",
+			"destination": "TEST",
+			"amount":      float64(100),
+		},
 	}
 	logEvent2 := domain.LogEvent{
 		Epoch:           100,
 		TickNumber:      1001,
-		Type:            1, // Non-zero to avoid filtering
+		Type:            0,
 		LogId:           2,
 		LogDigest:       "digest2",
 		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:       1704067201,
-		Body:            map[string]any{},
+		Body: map[string]any{
+			"source":      "TEST",
+			"destination": "TEST",
+			"amount":      float64(100),
+		},
 	}
 
 	logEvent1JSON, _ := json.Marshal(logEvent1)
@@ -535,12 +543,16 @@ func TestConsumeBatch_LogIdOverflow(t *testing.T) {
 	logEvent := domain.LogEvent{
 		Epoch:           100,
 		TickNumber:      1000,
-		Type:            1,                       // Non-zero to avoid filtering
+		Type:            0,
 		LogId:           uint64(math.MaxInt) + 1, // This will overflow when cast to int
 		LogDigest:       "test-digest",
 		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:       1704067200,
-		Body:            map[string]any{},
+		Body: map[string]any{
+			"source":      "SOURCE",
+			"destination": "DESTINATION",
+			"amount":      float64(100),
+		},
 	}
 
 	logEventJSON, _ := json.Marshal(logEvent)
@@ -589,15 +601,25 @@ func contains(s, substr string) bool {
 	return len(s) >= len(substr) && indexOf(s, substr) >= 0
 }
 
-func TestConsumeBatch_IsSupportedFiltering(t *testing.T) {
+func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 	tests := []struct {
 		name         string
-		eventType    uint32
+		eventType    int16
 		shouldFilter bool
 	}{
 		{
 			name:         "Type 0 is supported",
 			eventType:    0,
+			shouldFilter: false,
+		},
+		{
+			name:         "Type 1 is supported",
+			eventType:    1,
+			shouldFilter: false,
+		},
+		{
+			name:         "Type 2 is supported",
+			eventType:    2,
 			shouldFilter: false,
 		},
 		{
@@ -630,16 +652,29 @@ func TestConsumeBatch_IsSupportedFiltering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logEvent := domain.LogEvent{
-				Epoch:                 100,
-				TickNumber:            1000,
-				Type:                  tt.eventType,
-				EmittingContractIndex: 1, // Use non-zero to avoid Type=0 filter
-				LogId:                 12345,
-				LogDigest:             "test-digest",
-				TransactionHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
-				Timestamp:             1704067200,
-				Body:                  map[string]any{"amount": float64(100)},
-				Index:                 1,
+				Epoch:           100,
+				TickNumber:      1000,
+				Type:            tt.eventType,
+				LogId:           12345,
+				LogDigest:       "test-digest",
+				TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
+				Timestamp:       1704067200,
+				Body: map[string]any{
+					"source":                 "SOURCE",
+					"destination":            "DESTINATION",
+					"assetName":              "ASSET_NAME",
+					"assetIssuer":            "ASSET_ISSUER",
+					"amount":                 float64(100),
+					"numberOfShares":         float64(101),
+					"managingContractIndex":  float64(102),
+					"numberDecimalPlaces":    float64(103),
+					"unitOfMeasurement":      "0000000",
+					"contractIndexBurnedFor": float64(104),
+					"contractIndex":          float64(105),
+					"deductedAmount":         float64(106),
+					"remainingAmount":        float64(107),
+				},
+				Index: 1,
 			}
 
 			logEventJSON, _ := json.Marshal(logEvent)
@@ -722,7 +757,11 @@ func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 		LogDigest:             "test-digest",
 		TransactionHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
 		Timestamp:             1704067200,
-		Body:                  map[string]any{}, // No amount field means Amount=0
+		Body: map[string]any{
+			"source":      "SOURCE",
+			"destination": "DESTINATION",
+			"amount":      float64(0),
+		},
 	}
 
 	logEventJSON, _ := json.Marshal(logEvent)
@@ -780,25 +819,11 @@ func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
 	tests := []struct {
 		name                  string
-		typ                   uint32
-		emittingContractIndex uint32
+		typ                   int16
+		emittingContractIndex uint64
 		amount                uint64
 		shouldFilter          bool
 	}{
-		{
-			name:                  "Type non-zero, should not filter",
-			typ:                   1,
-			emittingContractIndex: 0,
-			amount:                0,
-			shouldFilter:          false,
-		},
-		{
-			name:                  "EmittingContractIndex non-zero, should not filter",
-			typ:                   0,
-			emittingContractIndex: 1,
-			amount:                0,
-			shouldFilter:          false,
-		},
 		{
 			name:                  "Amount non-zero, should not filter",
 			typ:                   0,
@@ -817,10 +842,11 @@ func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := map[string]any{}
-			if tt.amount > 0 {
-				body["amount"] = float64(tt.amount)
+			body := map[string]any{
+				"source":      "SOURCE",
+				"destination": "DESTINATION",
 			}
+			body["amount"] = float64(tt.amount)
 
 			logEvent := domain.LogEvent{
 				Epoch:                 100,
@@ -895,88 +921,36 @@ func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
 	}
 }
 
-func TestConsumeBatch_EpochOverflow(t *testing.T) {
-	// On 64-bit systems, uint32 always fits in int, so this test only applies to 32-bit
-	if math.MaxInt >= math.MaxUint32 {
-		t.Skip("Skipping epoch overflow test on 64-bit platform (uint32 always fits in int)")
-	}
-
-	// Create a LogEvent with Epoch exceeding MaxInt (only possible on 32-bit systems)
-	logEvent := domain.LogEvent{
-		Epoch:           math.MaxUint32, // This will overflow int on 32-bit systems
-		TickNumber:      1000,
-		Type:            1, // Non-zero to avoid filtering
-		LogId:           12345,
-		LogDigest:       "test-digest",
-		TransactionHash: "tx-hash",
-		Timestamp:       1704067200,
-		Body:            map[string]any{},
-	}
-
-	logEventJSON, _ := json.Marshal(logEvent)
-
-	mockKafka := &mockKafkaClient{
-		pollRecordsFunc: func(ctx context.Context, maxPollRecords int) kgo.Fetches {
-			record := &kgo.Record{
-				Value: logEventJSON,
-			}
-			return kgo.Fetches{
-				{
-					Topics: []kgo.FetchTopic{
-						{
-							Topic: "test-topic",
-							Partitions: []kgo.FetchPartition{
-								{
-									Partition: 0,
-									Records:   []*kgo.Record{record},
-								},
-							},
-						},
-					},
-				},
-			}
-		},
-	}
-
-	mockElastic := &mockElasticClient{}
-	m := metrics.NewMetrics("test_epoch_overflow")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
-
-	_, err := consumer.consumeBatch(context.Background())
-
-	if err == nil {
-		t.Fatal("Expected error for Epoch overflow, got nil")
-	}
-
-	// Verify the error message mentions overflow
-	expectedMsg := "exceeds maximum int value"
-	if !contains(err.Error(), expectedMsg) {
-		t.Errorf("Expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
-	}
-}
-
 func TestConsumeBatch_IDUniqueness(t *testing.T) {
 	// Test that IDs are unique even with potential collision patterns
 	const validTxHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib"
 	logEvent1 := domain.LogEvent{
 		Epoch:           1,
 		TickNumber:      1000,
-		Type:            1,
+		Type:            0,
 		LogId:           23,
 		LogDigest:       "digest1",
 		TransactionHash: validTxHash,
 		Timestamp:       1704067200,
-		Body:            map[string]any{},
+		Body: map[string]any{
+			"amount":      float64(100),
+			"source":      "SOURCE",
+			"destination": "DESTINATION",
+		},
 	}
 	logEvent2 := domain.LogEvent{
 		Epoch:           12,
 		TickNumber:      1001,
-		Type:            1,
+		Type:            0,
 		LogId:           3,
 		LogDigest:       "digest2",
 		TransactionHash: validTxHash,
 		Timestamp:       1704067201,
-		Body:            map[string]any{},
+		Body: map[string]any{
+			"amount":      float64(100),
+			"source":      "SOURCE",
+			"destination": "DESTINATION",
+		},
 	}
 
 	logEvent1JSON, _ := json.Marshal(logEvent1)
