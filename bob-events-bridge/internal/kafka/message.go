@@ -2,7 +2,6 @@ package kafka
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/qubic/bob-events-bridge/internal/bob"
 )
@@ -17,35 +16,9 @@ type EventMessage struct {
 	LogDigest             string         `json:"logDigest"`
 	LogID                 uint64         `json:"logId"`
 	BodySize              uint32         `json:"bodySize"`
-	Timestamp             int64          `json:"timestamp"`
+	Timestamp             uint64         `json:"timestamp"`
 	TransactionHash       string         `json:"transactionHash"`
 	Body                  map[string]any `json:"body"`
-}
-
-// ParseBobTimestamp parses a bob timestamp string into Unix seconds.
-// Bob sends 2-digit year format ("26-01-28 21:37:48"), with fallbacks for
-// 4-digit year ("2006-01-02 15:04:05") and RFC3339.
-func ParseBobTimestamp(ts string) (int64, error) {
-	// Bob sends zero timestamp for system/epoch-boundary events
-	if ts == "00-00-00 00:00:00" || ts == "" {
-		return 0, nil
-	}
-	// Bob sends 2-digit year: "26-01-28 21:37:48"
-	t, err := time.Parse("06-01-02 15:04:05", ts)
-	if err == nil {
-		return t.Unix(), nil
-	}
-	// 4-digit year fallback: "2024-06-15 14:30:00"
-	t, err = time.Parse("2006-01-02 15:04:05", ts)
-	if err == nil {
-		return t.Unix(), nil
-	}
-	// RFC3339 fallback (used in tests)
-	t, err = time.Parse(time.RFC3339, ts)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse timestamp %q: %w", ts, err)
-	}
-	return t.Unix(), nil
 }
 
 // TransformEventBody converts a typed bob event body into the Kafka body format
@@ -112,11 +85,6 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 
 // BuildEventMessage assembles a full Kafka EventMessage from bob message components.
 func BuildEventMessage(logMsg *bob.LogMessage, payload *bob.LogPayload, parsedBody interface{}, indexInTick uint32) (*EventMessage, error) {
-	ts, err := ParseBobTimestamp(payload.Timestamp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse timestamp: %w", err)
-	}
-
 	body, err := TransformEventBody(payload.Type, parsedBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transform event body: %w", err)
@@ -131,7 +99,7 @@ func BuildEventMessage(logMsg *bob.LogMessage, payload *bob.LogPayload, parsedBo
 		LogDigest:             payload.LogDigest,
 		LogID:                 payload.LogID,
 		BodySize:              payload.BodySize,
-		Timestamp:             ts,
+		Timestamp:             payload.Timestamp,
 		TransactionHash:       payload.TxHash,
 		Body:                  body,
 	}, nil

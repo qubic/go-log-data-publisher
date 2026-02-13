@@ -133,43 +133,6 @@ func TestTransformEventBody_UnsupportedType(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported event body type")
 }
 
-func TestParseBobTimestamp_TwoDigitYear(t *testing.T) {
-	ts, err := ParseBobTimestamp("26-01-28 21:37:48")
-	require.NoError(t, err)
-	// 2026-01-28 21:37:48 UTC = 1769636268
-	assert.Equal(t, int64(1769636268), ts)
-}
-
-func TestParseBobTimestamp_Valid(t *testing.T) {
-	ts, err := ParseBobTimestamp("2024-06-15 14:30:00")
-	require.NoError(t, err)
-	assert.Equal(t, int64(1718461800), ts)
-}
-
-func TestParseBobTimestamp_RFC3339Fallback(t *testing.T) {
-	ts, err := ParseBobTimestamp("2024-06-15T14:30:00Z")
-	require.NoError(t, err)
-	assert.Equal(t, int64(1718461800), ts)
-}
-
-func TestParseBobTimestamp_ZeroTimestamp(t *testing.T) {
-	ts, err := ParseBobTimestamp("00-00-00 00:00:00")
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), ts)
-}
-
-func TestParseBobTimestamp_EmptyString(t *testing.T) {
-	ts, err := ParseBobTimestamp("")
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), ts)
-}
-
-func TestParseBobTimestamp_Invalid(t *testing.T) {
-	_, err := ParseBobTimestamp("not-a-timestamp")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse timestamp")
-}
-
 func TestBuildEventMessage(t *testing.T) {
 	logMsg := &bob.LogMessage{
 		Type:      bob.MessageTypeLog,
@@ -187,7 +150,7 @@ func TestBuildEventMessage(t *testing.T) {
 		LogID:     42,
 		LogDigest: "abc123",
 		BodySize:  64,
-		Timestamp: "2024-06-15 14:30:00",
+		Timestamp: uint64(1718461800),
 		TxHash:    "TXHASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 	}
 
@@ -208,7 +171,7 @@ func TestBuildEventMessage(t *testing.T) {
 	assert.Equal(t, "abc123", msg.LogDigest)
 	assert.Equal(t, uint64(42), msg.LogID)
 	assert.Equal(t, uint32(64), msg.BodySize)
-	assert.Equal(t, int64(1718461800), msg.Timestamp)
+	assert.Equal(t, uint64(1718461800), msg.Timestamp)
 	assert.Equal(t, "TXHASHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msg.TransactionHash)
 	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msg.Body["source"])
 	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", msg.Body["destination"])
@@ -230,27 +193,11 @@ func TestBuildEventMessage_NilBody(t *testing.T) {
 		Type:      0,
 		LogID:     42,
 		LogDigest: "abc123",
-		Timestamp: "2024-06-15 14:30:00",
+		Timestamp: uint64(1718461800),
 		TxHash:    "TXHASH",
 	}
 
 	msg, err := BuildEventMessage(logMsg, payload, nil, 0)
 	require.NoError(t, err)
 	assert.Nil(t, msg.Body)
-}
-
-func TestBuildEventMessage_InvalidTimestamp(t *testing.T) {
-	logMsg := &bob.LogMessage{
-		Type:    bob.MessageTypeLog,
-		Message: json.RawMessage(`{}`),
-	}
-
-	payload := &bob.LogPayload{
-		OK:        true,
-		Timestamp: "invalid",
-	}
-
-	_, err := BuildEventMessage(logMsg, payload, nil, 0)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse timestamp")
 }
