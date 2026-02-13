@@ -194,6 +194,9 @@ func TestToByte(t *testing.T) {
 }
 
 func TestLogEvent_IsSupported(t *testing.T) {
+	supportedMap := map[uint64][]int16{
+		0: {0, 1, 2, 3, 8, 13},
+	}
 	tests := []struct {
 		name                  string
 		emittingContractIndex uint64
@@ -201,50 +204,64 @@ func TestLogEvent_IsSupported(t *testing.T) {
 		want                  bool
 	}{
 		{
-			name:      "Type 0 is supported",
-			eventType: 0,
-			want:      true,
+			name:                  "Type 0, contract index 0 is supported",
+			eventType:             0,
+			emittingContractIndex: 0,
+			want:                  true,
 		},
 		{
-			name:      "Type 1 is supported",
-			eventType: 1,
-			want:      true,
+			name:                  "Type 1, contract index 0 is supported",
+			eventType:             1,
+			emittingContractIndex: 0,
+			want:                  true,
 		},
 		{
-			name:      "Type 2 is supported",
-			eventType: 2,
-			want:      true,
+			name:                  "Type 2, contract index 0 is supported",
+			eventType:             2,
+			emittingContractIndex: 0,
+			want:                  true,
 		},
 		{
-			name:      "Type 3 is supported",
-			eventType: 3,
-			want:      true,
+			name:                  "Type 3, contract index 0 is supported",
+			eventType:             3,
+			emittingContractIndex: 0,
+			want:                  true,
 		},
 		{
-			name:      "Type 8 is supported",
-			eventType: 8,
-			want:      true,
+			name:                  "Type 8, contract index 0 is supported",
+			eventType:             8,
+			emittingContractIndex: 0,
+			want:                  true,
 		},
 		{
-			name:      "Type 13 is supported",
-			eventType: 13,
-			want:      true,
+			name:                  "Type 13, contract index 0 is supported",
+			eventType:             13,
+			emittingContractIndex: 0,
+			want:                  true,
 		},
 		{
-			name:      "Type 4 is not supported",
-			eventType: 4,
-			want:      false,
+			name:                  "Type 4, contract index 0 is not supported",
+			eventType:             4,
+			emittingContractIndex: 0,
+			want:                  false,
 		},
 		{
-			name:      "Type 100 is not supported",
-			eventType: 100,
-			want:      false,
+			name:                  "Type 0, contract index 1 is not supported",
+			eventType:             0,
+			emittingContractIndex: 1,
+			want:                  false,
+		},
+		{
+			name:                  "Type 100, contract index 0 is not supported",
+			eventType:             100,
+			emittingContractIndex: 0,
+			want:                  false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			le := &LogEvent{Type: tt.eventType, EmittingContractIndex: tt.emittingContractIndex}
-			if got := le.IsSupported(); got != tt.want {
+			if got := le.IsSupported(supportedMap); got != tt.want {
 				t.Errorf("IsSupported() = %v, want %v", got, tt.want)
 			}
 		})

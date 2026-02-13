@@ -25,18 +25,20 @@ type ElasticClient interface {
 }
 
 type Consumer struct {
-	kafkaClient    KafkaClient
-	elasticClient  ElasticClient
-	consumeMetrics *metrics.Metrics
-	currentTick    uint32
-	currentEpoch   uint32
+	kafkaClient       KafkaClient
+	elasticClient     ElasticClient
+	consumeMetrics    *metrics.Metrics
+	supportedLogTypes map[uint64][]int16
+	currentTick       uint32
+	currentEpoch      uint32
 }
 
-func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, metrics *metrics.Metrics) *Consumer {
+func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
 	return &Consumer{
-		kafkaClient:    kafkaClient,
-		elasticClient:  elasticClient,
-		consumeMetrics: metrics,
+		kafkaClient:       kafkaClient,
+		elasticClient:     elasticClient,
+		consumeMetrics:    metrics,
+		supportedLogTypes: supportedEventLogTypes,
 	}
 }
 
@@ -90,7 +92,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 		}
 
 		// basic filters before elastic conversion
-		if !logEvent.IsSupported() {
+		if !logEvent.IsSupported(c.supportedLogTypes) {
 			continue
 		}
 

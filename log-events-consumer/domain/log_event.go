@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/qubic/go-node-connector/types"
@@ -21,15 +22,6 @@ var sysTransactionMap = map[string]uint8{
 	"SC_NOTIFICATION_TX": 6,
 }
 
-var supportedLogEventTypes = map[int16]struct{}{
-	0:  {}, // qu transfer
-	1:  {}, // asset issuance
-	2:  {}, // asset ownership change
-	3:  {}, // asset possession change
-	8:  {}, // burn
-	13: {}, // contract reserve deduction
-}
-
 // LogEvent data received from kafka that is already validated for missing fields.
 // Some data types are a bit oversized but correspond with the elastic template.
 // We do not care about the source data types but the target data types here.
@@ -47,10 +39,15 @@ type LogEvent struct {
 	Body                  map[string]any `json:"body"`
 }
 
-func (le *LogEvent) IsSupported() bool {
-	_, ok := supportedLogEventTypes[le.Type]
-	ok = ok && le.EmittingContractIndex == 0
-	return ok
+func (le *LogEvent) IsSupported(supportedMap map[uint64][]int16) bool {
+	if supportedMap == nil {
+		return false
+	}
+	logTypes, ok := supportedMap[le.EmittingContractIndex]
+	if !ok {
+		return false
+	}
+	return slices.Contains(logTypes, le.Type)
 }
 
 func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
@@ -85,10 +82,6 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	}
 	if len(invalid) > 0 {
 		return LogEventElastic{}, fmt.Errorf("invalid zero value field(s): %v", invalid)
-	}
-
-	if lee.EmittingContractIndex > 0 {
-		return LogEventElastic{}, fmt.Errorf("unsupported emitting contract index: %d", lee.EmittingContractIndex)
 	}
 
 	category, isCategorized, err := inferCategory(lee.TransactionHash)

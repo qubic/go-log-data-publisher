@@ -59,8 +59,8 @@ func TestConsumeBatch_Success(t *testing.T) {
 		"timestamp": 1704067200,
 		"bodySize": 100,
 		"body": {
-			"source": "SOURCEADDRESS",
-			"destination": "DESTADDRESS",
+			"source": "SOURCE_ADDRESS",
+			"destination": "DEST_ADDRESS",
 			"amount": 1000
 		}
 	}`)
@@ -97,7 +97,7 @@ func TestConsumeBatch_Success(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_success")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -131,10 +131,10 @@ func TestConsumeBatch_Success(t *testing.T) {
 	}
 
 	// Check that body fields were flattened to top-level
-	if elasticDoc["source"] != "SOURCEADDRESS" {
+	if elasticDoc["source"] != "SOURCE_ADDRESS" {
 		t.Errorf("Expected source=SOURCEADDRESS, got: %v", elasticDoc["source"])
 	}
-	if elasticDoc["destination"] != "DESTADDRESS" {
+	if elasticDoc["destination"] != "DEST_ADDRESS" {
 		t.Errorf("Expected destination=DESTADDRESS, got: %v", elasticDoc["destination"])
 	}
 	if elasticDoc["amount"] != float64(1000) {
@@ -168,7 +168,7 @@ func TestConsumeBatch_EmptyBatch(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_empty")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -207,7 +207,7 @@ func TestConsumeBatch_InvalidJSON(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_invalid")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -257,7 +257,7 @@ func TestConsumeBatch_ConversionError(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_conversion_error")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -310,7 +310,7 @@ func TestConsumeBatch_ElasticError(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_elastic_err")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -361,7 +361,7 @@ func TestConsumeBatch_CommitError(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_commit_err")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -435,7 +435,7 @@ func TestConsumeBatch_MultipleRecords(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_multiple")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -465,7 +465,7 @@ func TestConsume_ContextCancellation(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_context_cancel")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -490,7 +490,7 @@ func TestUnmarshallLogEvent_Success(t *testing.T) {
 		Timestamp:             1704067200,
 		BodySize:              100,
 		Body: map[string]any{
-			"source": "SOURCEADDRESS",
+			"source": "SOURCE_ADDRESS",
 		},
 	}
 
@@ -647,7 +647,7 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics("test_supported_filter_" + tt.name)
-			consumer := NewConsumer(mockKafka, mockElastic, m)
+			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 			count, err := consumer.consumeBatch(context.Background())
 			if err != nil {
@@ -671,15 +671,6 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 			}
 		})
 	}
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
@@ -734,7 +725,7 @@ func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_filter")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -830,7 +821,7 @@ func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics(fmt.Sprintf("test_filter_edge_%d", i))
-			consumer := NewConsumer(mockKafka, mockElastic, m)
+			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 			count, err := consumer.consumeBatch(context.Background())
 
@@ -924,7 +915,7 @@ func TestConsumeBatch_IDUniqueness(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_id_uniqueness")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
+	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 

@@ -54,6 +54,10 @@ func run() error {
 			Port      int    `conf:"default:9999"`
 			Namespace string `conf:"default:qubic_kafka"`
 		}
+		Base struct {
+			// map with emitting contract index as key and supported log types as values
+			SupportedLogTypes map[uint64][]int16 `conf:"default:0:0;1;2;3;8;13"`
+		}
 	}
 
 	help, err := conf.Parse(configPrefix, &cfg)
@@ -111,7 +115,7 @@ func run() error {
 
 	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
 
-	consumer := consume.NewConsumer(kcl, elasticClient, consumeMetrics)
+	consumer := consume.NewConsumer(kcl, elasticClient, consumeMetrics, cfg.Base.SupportedLogTypes)
 	procError := make(chan error, 1)
 
 	consumerCtx, consumerCtxCancel := context.WithCancel(context.Background())
