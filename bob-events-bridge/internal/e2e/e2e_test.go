@@ -850,7 +850,7 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 1000,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 	mockBob.SendCatchUpComplete(0, 1, 1)
@@ -873,7 +873,7 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 	assert.Equal(t, uint32(145), msg.Epoch)
 	assert.Equal(t, "test-digest", msg.LogDigest)
 	assert.Equal(t, uint64(1), msg.LogID)
-	assert.Equal(t, int64(1718461800), msg.Timestamp)
+	assert.Equal(t, uint64(1718461800), msg.Timestamp)
 	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msg.TransactionHash)
 
 	// Verify body transformation (from→source, to→destination)
@@ -923,7 +923,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 500,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	require.NoError(t, mockBob.SendLogMessage(p0, 0, 0, false))
 
 	// Type 1: asset_issuance
@@ -934,25 +934,27 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"name":                  "QX",
 		"numberOfDecimalPlaces": 0,
 		"unitOfMeasurement":     "shares",
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	require.NoError(t, mockBob.SendLogMessage(p1, 0, 1, false))
 
 	// Type 2: asset_ownership_change
 	p2 := CreateLogPayloadWithTimestamp(145, tick, 3, 2, map[string]any{
 		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"assetName":            "QX",
 		"numberOfShares":       200,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	require.NoError(t, mockBob.SendLogMessage(p2, 0, 2, false))
 
 	// Type 3: asset_possession_change
 	p3 := CreateLogPayloadWithTimestamp(145, tick, 4, 3, map[string]any{
 		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"assetName":            "CFB",
 		"numberOfShares":       300,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	require.NoError(t, mockBob.SendLogMessage(p3, 0, 3, false))
 
 	// Type 8: burning
@@ -960,7 +962,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"publicKey":              "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"amount":                 999,
 		"contractIndexBurnedFor": 7,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	require.NoError(t, mockBob.SendLogMessage(p8, 0, 8, false))
 
 	// Type 13: contract_reserve_deduction
@@ -968,7 +970,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"deductedAmount":  5000,
 		"remainingAmount": 95000,
 		"contractIndex":   3,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	require.NoError(t, mockBob.SendLogMessage(p13, 0, 13, false))
 
 	mockBob.SendCatchUpComplete(0, 6, 6)
@@ -989,13 +991,15 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[1].Body["assetIssuer"])
 	assert.Equal(t, "QX", msgs[1].Body["assetName"])
 
-	// Verify type 2 body: sourcePublicKey→source, destinationPublicKey→destination
+	// Verify type 2 body: sourcePublicKey→source, destinationPublicKey→destination, issuerPublicKey→assetIssuer
 	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["source"])
 	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["destination"])
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["assetIssuer"])
 
-	// Verify type 3 body: sourcePublicKey→source, destinationPublicKey→destination
+	// Verify type 3 body: sourcePublicKey→source, destinationPublicKey→destination, issuerPublicKey→assetIssuer
 	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["source"])
 	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["destination"])
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["assetIssuer"])
 
 	// Verify type 8 body: publicKey→source
 	assert.Equal(t, "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[4].Body["source"])
@@ -1039,7 +1043,7 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 1000,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	err = mockBob.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 
@@ -1107,7 +1111,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 				"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 				"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 				"amount": i,
-			}, "2024-06-15 14:30:00")
+			}, uint64(1718461800))
 			err = mockBob.SendLogMessage(payload, 0, 0, false)
 			require.NoError(t, err)
 		}
@@ -1160,7 +1164,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		}, "2024-06-15 14:30:00")
+		}, uint64(1718461800))
 		err = mockBob2.SendLogMessage(payload, 0, 0, false)
 		require.NoError(t, err)
 	}
@@ -1171,7 +1175,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		}, "2024-06-15 14:30:01")
+		}, uint64(1718461801))
 		err = mockBob2.SendLogMessage(payload, 0, 0, false)
 		require.NoError(t, err)
 	}
@@ -1234,7 +1238,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": 1000,
-		}, "2024-06-15 14:30:00")
+		}, uint64(1718461800))
 		err = mockBob.SendLogMessage(payload, 0, 0, false)
 		require.NoError(t, err)
 		mockBob.SendCatchUpComplete(0, 1, 1)
@@ -1279,7 +1283,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 1000,
-	}, "2024-06-15 14:30:00")
+	}, uint64(1718461800))
 	err = mockBob2.SendLogMessage(payload, 0, 0, false)
 	require.NoError(t, err)
 
@@ -1288,7 +1292,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 2000,
-	}, "2024-06-15 14:30:01")
+	}, uint64(1718461801))
 	err = mockBob2.SendLogMessage(payload2, 0, 0, false)
 	require.NoError(t, err)
 	mockBob2.SendCatchUpComplete(0, 2, 2)

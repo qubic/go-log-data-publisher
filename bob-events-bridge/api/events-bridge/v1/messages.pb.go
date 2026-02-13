@@ -30,7 +30,7 @@ type Event struct {
 	Epoch         uint32                 `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	EventType     uint32                 `protobuf:"varint,4,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
 	TxHash        string                 `protobuf:"bytes,5,opt,name=tx_hash,json=txHash,proto3" json:"tx_hash,omitempty"`
-	Timestamp     string                 `protobuf:"bytes,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Timestamp     uint64                 `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	Body          *structpb.Struct       `protobuf:"bytes,7,opt,name=body,proto3" json:"body,omitempty"`
 	IndexInTick   uint32                 `protobuf:"varint,8,opt,name=index_in_tick,json=indexInTick,proto3" json:"index_in_tick,omitempty"`
 	LogDigest     string                 `protobuf:"bytes,9,opt,name=log_digest,json=logDigest,proto3" json:"log_digest,omitempty"`
@@ -103,11 +103,11 @@ func (x *Event) GetTxHash() string {
 	return ""
 }
 
-func (x *Event) GetTimestamp() string {
+func (x *Event) GetTimestamp() uint64 {
 	if x != nil {
 		return x.Timestamp
 	}
-	return ""
+	return 0
 }
 
 func (x *Event) GetBody() *structpb.Struct {
@@ -432,7 +432,7 @@ const file_messages_proto_rawDesc = "" +
 	"\n" +
 	"event_type\x18\x04 \x01(\rR\teventType\x12\x17\n" +
 	"\atx_hash\x18\x05 \x01(\tR\x06txHash\x12\x1c\n" +
-	"\ttimestamp\x18\x06 \x01(\tR\ttimestamp\x12+\n" +
+	"\ttimestamp\x18\x06 \x01(\x04R\ttimestamp\x12+\n" +
 	"\x04body\x18\a \x01(\v2\x17.google.protobuf.StructR\x04body\x12\"\n" +
 	"\rindex_in_tick\x18\b \x01(\rR\vindexInTick\x12\x1d\n" +
 	"\n" +

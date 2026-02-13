@@ -43,7 +43,7 @@ type LogPayload struct {
 	LogDigest   string          `json:"logDigest"`
 	BodySize    uint32          `json:"bodySize"`
 	LogTypeName string          `json:"logTypename,omitempty"`
-	Timestamp   string          `json:"timestamp,omitempty"`
+	Timestamp   uint64          `json:"timestamp,omitempty"`
 	TxHash      string          `json:"txHash,omitempty"`
 	Body        json.RawMessage `json:"body,omitempty"`
 }

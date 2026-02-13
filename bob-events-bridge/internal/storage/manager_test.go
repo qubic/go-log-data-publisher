@@ -20,7 +20,7 @@ func createTestEvent(epoch, tick uint32, logID uint64) *eventsbridge.Event {
 		EventType: 0, // qu_transfer
 		TxHash:    fmt.Sprintf("hash_%d_%d", tick, logID),
 		LogDigest: fmt.Sprintf("digest_%d_%d", tick, logID),
-		Timestamp: "2024-01-01T00:00:00Z",
+		Timestamp: 1704067200,
 		Body:      nil,
 	}
 }

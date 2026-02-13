@@ -52,6 +52,7 @@ func TestParseEventBody_AssetOwnershipChange(t *testing.T) {
 	body := json.RawMessage(`{
 		"sourcePublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"destinationPublicKey": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"issuerPublicKey": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"assetName": "TEST",
 		"numberOfShares": 500
 	}`)
@@ -63,6 +64,7 @@ func TestParseEventBody_AssetOwnershipChange(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.SourcePublicKey)
 	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", parsed.DestinationPublicKey)
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.IssuerPublicKey)
 	assert.Equal(t, "TEST", parsed.AssetName)
 	assert.Equal(t, int64(500), parsed.NumberOfShares)
 }
@@ -71,6 +73,7 @@ func TestParseEventBody_AssetPossessionChange(t *testing.T) {
 	body := json.RawMessage(`{
 		"sourcePublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"destinationPublicKey": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"issuerPublicKey": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"assetName": "ASSET",
 		"numberOfShares": 250
 	}`)
@@ -82,6 +85,7 @@ func TestParseEventBody_AssetPossessionChange(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.SourcePublicKey)
 	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", parsed.DestinationPublicKey)
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.IssuerPublicKey)
 	assert.Equal(t, "ASSET", parsed.AssetName)
 	assert.Equal(t, int64(250), parsed.NumberOfShares)
 }

@@ -13,7 +13,7 @@ message Event {
     uint32 epoch = 3;
     uint32 event_type = 4;
     string tx_hash = 5;
-    string timestamp = 6;
+    uint64 timestamp = 6;
     google.protobuf.Struct body = 7;
     uint32 index_in_tick = 8;
     string log_digest = 9;

@@ -92,7 +92,7 @@ Each log event received from bob arrives as a JSON message with this structure:
     "bodySize": <uint32>,
     "logTypename": "<string>",
     "body": { ... },
-    "timestamp": "<YYYY-MM-DD HH:MM:SS>",
+    "timestamp": <uint64_unix_seconds>,
     "txHash": "<transaction_hash>"
   }
 }
@@ -152,6 +152,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "sourcePublicKey": "<qubic_address>",
   "destinationPublicKey": "<qubic_address>",
+  "issuerPublicKey": "<qubic_address>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }
@@ -162,6 +163,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "source": "<bob_sourcePublicKey>",
   "destination": "<bob_destinationPublicKey>",
+  "assetIssuer": "<bob_issuerPublicKey>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }
@@ -173,6 +175,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "sourcePublicKey": "<qubic_address>",
   "destinationPublicKey": "<qubic_address>",
+  "issuerPublicKey": "<qubic_address>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }
@@ -183,6 +186,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "source": "<bob_sourcePublicKey>",
   "destination": "<bob_destinationPublicKey>",
+  "assetIssuer": "<bob_issuerPublicKey>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }
@@ -238,7 +242,7 @@ Events with `"ok": false` are skipped by the processor.
   "logDigest": "a1b2c3d4e5f60718",
   "logId": <logId from bob>,
   "bodySize": 72,
-  "timestamp": <unix timestamp converted from string date format from timestamp field bob>,
+  "timestamp": <uint64_unix_seconds_from_bob>,
   "transactionHash": <txHash from bob>,
   "body": {} // this is the event body which differs for each event type, the format is above for each format
 }

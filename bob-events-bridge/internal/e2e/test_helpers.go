@@ -34,11 +34,11 @@ func CreateTestConfig(mockBob *MockBobServer, storagePath string) *config.Config
 
 // CreateLogPayload creates a LogPayload with all required fields
 func CreateLogPayload(epoch uint16, tick uint32, logID uint64, eventType uint32, body map[string]any) bob.LogPayload {
-	return CreateLogPayloadWithTimestamp(epoch, tick, logID, eventType, body, time.Now().UTC().Format(time.RFC3339))
+	return CreateLogPayloadWithTimestamp(epoch, tick, logID, eventType, body, uint64(time.Now().Unix()))
 }
 
-// CreateLogPayloadWithTimestamp creates a LogPayload with a specific timestamp string.
-func CreateLogPayloadWithTimestamp(epoch uint16, tick uint32, logID uint64, eventType uint32, body map[string]any, timestamp string) bob.LogPayload {
+// CreateLogPayloadWithTimestamp creates a LogPayload with a specific timestamp.
+func CreateLogPayloadWithTimestamp(epoch uint16, tick uint32, logID uint64, eventType uint32, body map[string]any, timestamp uint64) bob.LogPayload {
 	var bodyJSON json.RawMessage
 	if body != nil {
 		bodyJSON, _ = json.Marshal(body)
