@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -55,10 +56,16 @@ func run() error {
 			Namespace string `conf:"default:qubic_kafka"`
 		}
 		Base struct {
-			// map with emitting contract index as key and supported log types as values
-			SupportedLogTypes map[uint64][]int16 `conf:"default:0:0;1;2;3;8;13"`
+			// map in json format with emitting contract index as key and supported log types as values
+			SupportedLogTypes string
 		}
 	}
+
+	// Parsing of the default value didn't work properly. We manually set the default.
+	if cfg.Base.SupportedLogTypes == "" {
+		cfg.Base.SupportedLogTypes = `{"0":[0,1,2,3,8,13]}`
+	}
+	supportedTypes := parseSupportedTypes(cfg.Base.SupportedLogTypes)
 
 	help, err := conf.Parse(configPrefix, &cfg)
 	if err != nil {
@@ -115,7 +122,7 @@ func run() error {
 
 	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
 
-	consumer := consume.NewConsumer(kcl, elasticClient, consumeMetrics, cfg.Base.SupportedLogTypes)
+	consumer := consume.NewConsumer(kcl, elasticClient, consumeMetrics, supportedTypes)
 	procError := make(chan error, 1)
 
 	consumerCtx, consumerCtxCancel := context.WithCancel(context.Background())
@@ -166,6 +173,16 @@ func run() error {
 		}
 	}
 
+}
+
+func parseSupportedTypes(mapStr string) map[uint64][]int16 {
+	log.Printf("main: supported log types input: %s", mapStr)
+	var logTypes map[uint64][]int16
+	if err := json.Unmarshal([]byte(mapStr), &logTypes); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("main: parsed supported log types: %v", logTypes)
+	return logTypes
 }
 
 func shutdownHTTPServer(srv *http.Server) {
