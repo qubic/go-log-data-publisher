@@ -1,10 +1,12 @@
 package domain
 
-// use pointers to support empty numbers (by default omitempty treats zero values as empty)
+// LogEventElastic document sent to elastic.
+// Uses pointers to support potential zeros (by default, omitempty treats zero values as empty)
+// Make sure to add json e2e tests for every supported log event.
 type LogEventElastic struct {
 	Epoch                 uint32 `json:"epoch"`
 	TickNumber            uint64 `json:"tickNumber"`
-	Timestamp             int64  `json:"timestamp"`
+	Timestamp             uint64 `json:"timestamp"`
 	EmittingContractIndex uint64 `json:"emittingContractIndex"`
 	TransactionHash       string `json:"transactionHash,omitempty"`
 	LogId                 uint64 `json:"logId"`

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/qubic/log-events-consumer/domain"
@@ -536,69 +535,6 @@ func TestUnmarshallLogEvent_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for invalid JSON, got nil")
 	}
-}
-
-func TestConsumeBatch_LogIdOverflow(t *testing.T) {
-	// Create a LogEvent with LogId exceeding MaxInt
-	logEvent := domain.LogEvent{
-		Epoch:           100,
-		TickNumber:      1000,
-		Type:            0,
-		LogId:           uint64(math.MaxInt) + 1, // This will overflow when cast to int
-		LogDigest:       "test-digest",
-		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
-		Timestamp:       1704067200,
-		Body: map[string]any{
-			"source":      "SOURCE",
-			"destination": "DESTINATION",
-			"amount":      float64(100),
-		},
-	}
-
-	logEventJSON, _ := json.Marshal(logEvent)
-
-	mockKafka := &mockKafkaClient{
-		pollRecordsFunc: func(ctx context.Context, maxPollRecords int) kgo.Fetches {
-			record := &kgo.Record{
-				Value: logEventJSON,
-			}
-			return kgo.Fetches{
-				{
-					Topics: []kgo.FetchTopic{
-						{
-							Topic: "test-topic",
-							Partitions: []kgo.FetchPartition{
-								{
-									Partition: 0,
-									Records:   []*kgo.Record{record},
-								},
-							},
-						},
-					},
-				},
-			}
-		},
-	}
-
-	mockElastic := &mockElasticClient{}
-	m := metrics.NewMetrics("test_overflow")
-	consumer := NewConsumer(mockKafka, mockElastic, m)
-
-	_, err := consumer.consumeBatch(context.Background())
-
-	if err == nil {
-		t.Fatal("Expected error for LogId overflow, got nil")
-	}
-
-	// Verify the error message mentions overflow
-	expectedMsg := "exceeds maximum int value"
-	if !contains(err.Error(), expectedMsg) {
-		t.Errorf("Expected error message to contain '%s', got '%s'", expectedMsg, err.Error())
-	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && indexOf(s, substr) >= 0
 }
 
 func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {

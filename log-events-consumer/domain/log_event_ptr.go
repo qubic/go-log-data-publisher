@@ -14,7 +14,7 @@ type LogEventPtr struct {
 	LogId                 *uint64         `json:"logId"`
 	LogDigest             *string         `json:"logDigest"`
 	TransactionHash       *string         `json:"transactionHash"`
-	Timestamp             *int64          `json:"timestamp"`
+	Timestamp             *uint64         `json:"timestamp"`
 	BodySize              *uint32         `json:"bodySize"`
 	Body                  *map[string]any `json:"body"`
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"strconv"
 	"time"
 
@@ -58,6 +57,7 @@ func (c *Consumer) Consume(ctx context.Context) error {
 			if count > 0 {
 				log.Printf("Processed [%d] records. Tick: [%d]", count, c.currentTick)
 			}
+
 		}
 	}
 	return nil
@@ -109,17 +109,13 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			return -1, fmt.Errorf("marshalling log event [value=%v]: %w", logEvent, err)
 		}
 
-		// Prevent overflow when converting epoch/logId to int for document ID.
-		if uint64(logEvent.Epoch) > math.MaxInt || logEvent.LogId > math.MaxInt {
-			return -1, fmt.Errorf("epoch %d or logId %d exceeds maximum int value (%d), cannot convert to document ID", logEvent.Epoch, logEvent.LogId, math.MaxInt)
-		}
-
 		// Use separator to prevent ID collisions (e.g., epoch=1,logId=23 vs epoch=12,logId=3).
 		documents = append(documents, &elastic.EsDocument{
-			Id:      strconv.Itoa(int(logEvent.Epoch)) + "-" + strconv.Itoa(int(logEvent.LogId)),
+			Id:      strconv.FormatUint(uint64(logEvent.Epoch), 10) + "-" + strconv.FormatUint(logEvent.LogId, 10),
 			Payload: val,
 		})
 
+		// we know that tick number cannot exceed uint32 according to current core code
 		if uint32(logEvent.TickNumber) > c.currentTick {
 			c.currentTick = uint32(logEvent.TickNumber)
 			c.currentEpoch = logEvent.Epoch

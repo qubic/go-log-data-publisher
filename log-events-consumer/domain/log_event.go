@@ -30,6 +30,9 @@ var supportedLogEventTypes = map[int16]struct{}{
 	13: {}, // contract reserve deduction
 }
 
+// LogEvent data received from kafka that is already validated for missing fields.
+// Some data types are a bit oversized but correspond with the elastic template.
+// We do not care about the source data types but the target data types here.
 type LogEvent struct {
 	Epoch                 uint32         `json:"epoch"`
 	TickNumber            uint64         `json:"tickNumber"`
@@ -39,7 +42,7 @@ type LogEvent struct {
 	LogId                 uint64         `json:"logId"`
 	LogDigest             string         `json:"logDigest"` // hex
 	TransactionHash       string         `json:"transactionHash"`
-	Timestamp             int64          `json:"timestamp"`
+	Timestamp             uint64         `json:"timestamp"`
 	BodySize              uint32         `json:"bodySize"`
 	Body                  map[string]any `json:"body"`
 }
@@ -51,10 +54,6 @@ func (le *LogEvent) IsSupported() bool {
 }
 
 func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
-
-	if le.Type > 32767 {
-		return LogEventElastic{}, fmt.Errorf("type value %d exceeds int16 maximum of 32767", le.Type)
-	}
 
 	lee := LogEventElastic{
 		Epoch:                 le.Epoch,
@@ -144,30 +143,30 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 func inferCategory(transactionHash string) (byte, bool, error) {
 
 	if len(transactionHash) == 0 { // all good
-		return 0x00, false, nil
+		return 0, false, nil
 	}
 
 	err := validateIdentity(transactionHash, true)
 	if err == nil { // all good
-		return 0x00, false, nil
+		return 0, false, nil
 	}
 
 	// check for encoded message in transaction hash
 
 	if !strings.HasPrefix(transactionHash, "SC_") { // unknown encoding
-		return 0x00, false, fmt.Errorf("unexpected special hash [%s]", transactionHash)
+		return 0, false, fmt.Errorf("unexpected special hash [%s]", transactionHash)
 	}
 
 	// Find the last underscore
 	lastUnderscore := strings.LastIndex(transactionHash, "_") // find the last underscore to split
 	if lastUnderscore == -1 {
-		return 0x00, false, fmt.Errorf("cannot split special hash [%s]", transactionHash)
+		return 0, false, fmt.Errorf("cannot split special hash [%s]", transactionHash)
 	}
 
 	prefix := transactionHash[:lastUnderscore] // remove postfix
 	value, ok := sysTransactionMap[prefix]     // find known category
 	if !ok {
-		return 0x00, false, fmt.Errorf("unexpected special event log type [%s]", transactionHash)
+		return 0, false, fmt.Errorf("unexpected special event log type [%s]", transactionHash)
 	}
 
 	return value, true, nil
@@ -195,6 +194,7 @@ func handleQuTransfer(lee *LogEventElastic, body map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("converting amount: %w", err)
 	}
+
 	return nil
 }
 
@@ -248,6 +248,7 @@ func handleAssetIssuance(lee *LogEventElastic, body map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("converting unit of measurement: %w", err)
 	}
+
 	return nil
 }
 
@@ -286,6 +287,7 @@ func handleAssetTransfer(lee *LogEventElastic, body map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("converting number of shares: %w", err)
 	}
+
 	return nil
 }
 
@@ -307,14 +309,15 @@ func handleBurn(lee *LogEventElastic, body map[string]any) error {
 		return fmt.Errorf("converting amount: %w", err)
 	}
 
-	cibf, ok := body["contractIndexBurnedFor"].(float64)
+	contractIndexBurnedFor, ok := body["contractIndexBurnedFor"].(float64)
 	if !ok {
 		return fmt.Errorf("missing or invalid contract index burned for")
 	}
-	lee.ContractIndexBurnedFor, err = toUint64(cibf)
+	lee.ContractIndexBurnedFor, err = toUint64(contractIndexBurnedFor)
 	if err != nil {
 		return fmt.Errorf("converting contract index burned for: %w", err)
 	}
+
 	return nil
 }
 
@@ -347,6 +350,7 @@ func handleReserveDeduction(lee *LogEventElastic, body map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("converting remaining amount: %w", err)
 	}
+
 	return nil
 }
 
