@@ -94,14 +94,14 @@ func (p *Processor) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to fetch bob status for initial tick: %w", err)
 		}
-		p.lastTick = status.InitialTick
+		p.lastTick = status.InitialTick - 1
 		p.logger.Info("Starting fresh from bob's initial tick",
 			zap.Uint32("initialTick", p.lastTick))
 	}
 
 	// Override start tick if configured (overrides both persisted state and fresh start)
 	if p.cfg.Bob.OverrideStartTick {
-		p.lastTick = p.cfg.Bob.StartTick
+		p.lastTick = p.cfg.Bob.StartTick - 1
 		p.lastLogID = 0
 		p.tickEventIndex = 0
 		p.logger.Info("Overriding start tick from config",
