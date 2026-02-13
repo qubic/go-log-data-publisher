@@ -1,6 +1,7 @@
 # log-events-consumer
 
-Service for consuming qubic log event messages from a kafka message broker.
+Service for consuming qubic log event messages from a kafka message broker and indexing supported event logs into
+elastic search.
 
 ## Build
 
