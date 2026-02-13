@@ -5,6 +5,7 @@ go 1.23.0
 require (
 	github.com/ardanlabs/conf/v3 v3.1.7
 	github.com/cockroachdb/pebble v1.1.0
+	github.com/google/go-cmp v0.6.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.24.0
 	github.com/segmentio/kafka-go v0.4.50

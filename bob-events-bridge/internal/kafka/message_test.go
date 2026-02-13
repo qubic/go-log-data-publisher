@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/qubic/bob-events-bridge/internal/bob"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,12 +19,15 @@ func TestTransformEventBody_QuTransfer(t *testing.T) {
 
 	result, err := TransformEventBody(bob.LogTypeQuTransfer, body)
 	require.NoError(t, err)
-	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["source"])
-	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", result["destination"])
-	assert.Equal(t, int64(1000), result["amount"])
-	// Verify old field names are NOT present
-	assert.Nil(t, result["from"])
-	assert.Nil(t, result["to"])
+
+	expected := map[string]any{
+		"source":      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"destination": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount":      int64(1000),
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestTransformEventBody_AssetIssuance(t *testing.T) {
@@ -38,15 +42,18 @@ func TestTransformEventBody_AssetIssuance(t *testing.T) {
 
 	result, err := TransformEventBody(bob.LogTypeAssetIssuance, body)
 	require.NoError(t, err)
-	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["assetIssuer"])
-	assert.Equal(t, "QX", result["assetName"])
-	assert.Equal(t, int64(100000), result["numberOfShares"])
-	assert.Equal(t, int64(5), result["managingContractIndex"])
-	assert.Equal(t, 0, result["numberOfDecimalPlaces"])
-	assert.Equal(t, "shares", result["unitOfMeasurement"])
-	// Verify old field names are NOT present
-	assert.Nil(t, result["issuerPublicKey"])
-	assert.Nil(t, result["name"])
+
+	expected := map[string]any{
+		"assetIssuer":           "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetName":             "QX",
+		"numberOfShares":        int64(100000),
+		"managingContractIndex": int64(5),
+		"numberOfDecimalPlaces": 0,
+		"unitOfMeasurement":     "shares",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestTransformEventBody_AssetOwnershipChange(t *testing.T) {
@@ -60,14 +67,17 @@ func TestTransformEventBody_AssetOwnershipChange(t *testing.T) {
 
 	result, err := TransformEventBody(bob.LogTypeAssetOwnershipChange, body)
 	require.NoError(t, err)
-	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["source"])
-	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["destination"])
-	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["assetIssuer"])
-	assert.Equal(t, "QX", result["assetName"])
-	assert.Equal(t, int64(500), result["numberOfShares"])
-	assert.Nil(t, result["sourcePublicKey"])
-	assert.Nil(t, result["destinationPublicKey"])
-	assert.Nil(t, result["issuerPublicKey"])
+
+	expected := map[string]any{
+		"source":         "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"destination":    "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetIssuer":    "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetName":      "QX",
+		"numberOfShares": int64(500),
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestTransformEventBody_AssetPossessionChange(t *testing.T) {
@@ -81,14 +91,17 @@ func TestTransformEventBody_AssetPossessionChange(t *testing.T) {
 
 	result, err := TransformEventBody(bob.LogTypeAssetPossessionChange, body)
 	require.NoError(t, err)
-	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["source"])
-	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["destination"])
-	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["assetIssuer"])
-	assert.Equal(t, "CFB", result["assetName"])
-	assert.Equal(t, int64(200), result["numberOfShares"])
-	assert.Nil(t, result["sourcePublicKey"])
-	assert.Nil(t, result["destinationPublicKey"])
-	assert.Nil(t, result["issuerPublicKey"])
+
+	expected := map[string]any{
+		"source":         "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"destination":    "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetIssuer":    "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetName":      "CFB",
+		"numberOfShares": int64(200),
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestTransformEventBody_Burning(t *testing.T) {
@@ -100,10 +113,15 @@ func TestTransformEventBody_Burning(t *testing.T) {
 
 	result, err := TransformEventBody(bob.LogTypeBurning, body)
 	require.NoError(t, err)
-	assert.Equal(t, "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["source"])
-	assert.Equal(t, int64(999), result["amount"])
-	assert.Equal(t, uint32(7), result["contractIndexBurnedFor"])
-	assert.Nil(t, result["publicKey"])
+
+	expected := map[string]any{
+		"source":                 "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"amount":                 int64(999),
+		"contractIndexBurnedFor": uint32(7),
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestTransformEventBody_ContractReserveDeduction(t *testing.T) {
@@ -115,9 +133,15 @@ func TestTransformEventBody_ContractReserveDeduction(t *testing.T) {
 
 	result, err := TransformEventBody(bob.LogTypeContractReserveDeduction, body)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(5000), result["deductedAmount"])
-	assert.Equal(t, int64(95000), result["remainingAmount"])
-	assert.Equal(t, uint32(3), result["contractIndex"])
+
+	expected := map[string]any{
+		"deductedAmount":  uint64(5000),
+		"remainingAmount": int64(95000),
+		"contractIndex":   uint32(3),
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestTransformEventBody_NilBody(t *testing.T) {
