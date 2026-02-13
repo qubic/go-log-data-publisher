@@ -1,0 +1,17 @@
+{
+  "epoch": 200,
+  "tickNumber": 43926492,
+  "index": 131,
+  "type": 8,
+  "emittingContractIndex": 0,
+  "logId": 467868,
+  "logDigest": "364ad554782b8b9c",
+  "transactionHash": "SC_END_TICK_TX_43926492",
+  "timestamp": 1770842989,
+  "bodySize": 44,
+  "body": {
+    "amount": 750,
+    "contractIndexBurnedFor": 13,
+    "source": "NAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAML"
+  }
+}

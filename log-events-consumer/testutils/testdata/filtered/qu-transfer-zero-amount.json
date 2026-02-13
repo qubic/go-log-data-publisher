@@ -1,0 +1,17 @@
+{
+  "epoch": 199,
+  "tickNumber": 43507671,
+  "index": 27,
+  "type": 0,
+  "emittingContractIndex": 0,
+  "logId": 282618,
+  "logDigest": "ab042c99d9461881",
+  "transactionHash": "dkzxuegxfbbeeanspaourlzbmtdbhakfarbybmkiygegoavqugvfjxqfdspn",
+  "timestamp": 1770230484,
+  "bodySize": 72,
+  "body": {
+    "amount": 0,
+    "destination": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
+    "source": "SNBCRTNTDZHPJCFURNNSVKTKPVOCKIWVOYNJIGLRRCOCVWOAKFIWLHEHRHDO"
+  }
+}

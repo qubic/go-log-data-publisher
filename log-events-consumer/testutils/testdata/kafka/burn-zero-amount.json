@@ -1,0 +1,17 @@
+{
+  "epoch": 199,
+  "tickNumber": 43847085,
+  "index": 32,
+  "type": 8,
+  "emittingContractIndex": 0,
+  "logId": 7747273,
+  "logDigest": "18056b0ab4f5920e",
+  "transactionHash": "ivpwwfduiasixdvozdqjurgepeperwlxluosciufsbsuhgqdtswlxioadufi",
+  "timestamp": 1770790495,
+  "bodySize": 44,
+  "body": {
+    "amount": 0,
+    "contractIndexBurnedFor": 9,
+    "source": "JAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKHO"
+  }
+}

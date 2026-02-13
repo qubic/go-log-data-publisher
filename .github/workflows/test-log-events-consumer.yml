@@ -1,0 +1,25 @@
+on:
+  push:
+    paths:
+      - 'log-events-consumer/**'
+  pull_request:
+    paths:
+      - 'log-events-consumer/**'
+
+name: Test log events consumer
+
+jobs:
+  test-nocache:
+    strategy:
+      matrix:
+        go-version: [1.25.x]
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: false
+      - run: go test -p 1 -tags ci ./...
+        working-directory: log-events-consumer

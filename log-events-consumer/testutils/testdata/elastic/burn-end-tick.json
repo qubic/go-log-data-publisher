@@ -1,0 +1,13 @@
+{
+  "epoch": 200,
+  "tickNumber": 43926492,
+  "timestamp": 1770842989,
+  "emittingContractIndex": 0,
+  "logId": 467868,
+  "logDigest": "364ad554782b8b9c",
+  "type": 8,
+  "category": 4,
+  "source": "NAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAML",
+  "amount": 750,
+  "contractIndexBurnedFor": 13
+}

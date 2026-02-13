@@ -1,0 +1,16 @@
+{
+  "epoch": 199,
+  "tickNumber": 43786453,
+  "timestamp": 1770679021,
+  "emittingContractIndex": 0,
+  "transactionHash": "joieezsjflprlgerjphlyuwsykzabipxkyjqgwfnbgeyuuhfoocugmbembwd",
+  "logId": 6036961,
+  "logDigest": "efd149b5526ae0bf",
+  "type": 1,
+  "assetName": "BURNER",
+  "assetIssuer": "BIWLXVCUXYLOQDANJVESJVABISGCNURGYTXMEJTCHBBOEMNZUJQKPPECMBDO",
+  "managingContractIndex": 1,
+  "unitOfMeasurement": "AAAAAAAAAA==",
+  "numberOfDecimalPlaces": 0,
+  "numberOfShares": 676000000000
+}

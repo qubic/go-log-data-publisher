@@ -1,0 +1,13 @@
+{
+  "epoch": 199,
+  "tickNumber": 43829137,
+  "timestamp": 1770762208,
+  "emittingContractIndex": 0,
+  "transactionHash": "mlvtvlzzsdanjhtxuqalswyfflnbtgqyskshjsshudhxmwlvwovnmmrgazmi",
+  "logId": 7244209,
+  "logDigest": "f4f46c32001a7fbf",
+  "type": 13,
+  "contractIndex": 9,
+  "deductedAmount": 1,
+  "remainingAmount": 577551557614
+}
