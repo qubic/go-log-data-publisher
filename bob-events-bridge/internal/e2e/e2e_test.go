@@ -427,14 +427,15 @@ func TestE2E_GetStatus(t *testing.T) {
 	}
 	mockBob.SendCatchUpComplete(0, 5, 5)
 
-	// Wait for all events
-	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
-		exists, _ := storageMgr.HasEvent(145, 22000005, 5)
-		return exists
-	}, "last event should be stored")
-
-	// Check status
+	// Wait for all events and state cache to be consistent
 	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		status, err := service.GetStatus(ctx, nil)
+		if err != nil || len(status.Epochs) == 0 {
+			return false
+		}
+		return status.Epochs[0].TotalEvents == 5
+	}, "status should reflect all 5 events")
 	status, err := service.GetStatus(ctx, nil)
 	require.NoError(t, err)
 

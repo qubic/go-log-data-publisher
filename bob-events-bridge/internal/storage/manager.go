@@ -296,21 +296,33 @@ func (m *Manager) GetStatus() (*eventsbridge.GetStatusResponse, error) {
 	}
 	sort.Slice(epochs, func(i, j int) bool { return epochs[i] < epochs[j] })
 
-	// Build epoch info
+	// Build epoch info from cached state (O(1) per epoch)
 	for _, epoch := range epochs {
-		db := m.epochDBs[epoch]
-
-		intervals, totalEvents, err := db.GetTickIntervals()
+		minTick, maxTick, exists, err := m.state.GetEpochTickRange(epoch)
 		if err != nil {
-			m.logger.Warn("Failed to get tick intervals",
+			m.logger.Warn("Failed to get epoch tick range",
+				zap.Uint32("epoch", epoch),
+				zap.Error(err))
+			continue
+		}
+		if !exists {
+			continue
+		}
+
+		totalEvents, err := m.state.GetEpochEventCount(epoch)
+		if err != nil {
+			m.logger.Warn("Failed to get epoch event count",
 				zap.Uint32("epoch", epoch),
 				zap.Error(err))
 			continue
 		}
 
 		epochInfo := &eventsbridge.EpochInfo{
-			Epoch:       epoch,
-			Intervals:   intervals,
+			Epoch: epoch,
+			Intervals: []*eventsbridge.TickInterval{{
+				FirstTick: minTick,
+				LastTick:  maxTick,
+			}},
 			TotalEvents: totalEvents,
 		}
 
