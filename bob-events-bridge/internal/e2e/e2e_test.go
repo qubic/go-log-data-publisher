@@ -941,6 +941,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 	p2 := CreateLogPayloadWithTimestamp(145, tick, 3, 2, map[string]any{
 		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"assetName":            "QX",
 		"numberOfShares":       200,
 	}, "2024-06-15 14:30:00")
@@ -950,6 +951,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 	p3 := CreateLogPayloadWithTimestamp(145, tick, 4, 3, map[string]any{
 		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"assetName":            "CFB",
 		"numberOfShares":       300,
 	}, "2024-06-15 14:30:00")
@@ -989,13 +991,15 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[1].Body["assetIssuer"])
 	assert.Equal(t, "QX", msgs[1].Body["assetName"])
 
-	// Verify type 2 body: sourcePublicKey→source, destinationPublicKey→destination
+	// Verify type 2 body: sourcePublicKey→source, destinationPublicKey→destination, issuerPublicKey→assetIssuer
 	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["source"])
 	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["destination"])
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["assetIssuer"])
 
-	// Verify type 3 body: sourcePublicKey→source, destinationPublicKey→destination
+	// Verify type 3 body: sourcePublicKey→source, destinationPublicKey→destination, issuerPublicKey→assetIssuer
 	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["source"])
 	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["destination"])
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["assetIssuer"])
 
 	// Verify type 8 body: publicKey→source
 	assert.Equal(t, "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[4].Body["source"])

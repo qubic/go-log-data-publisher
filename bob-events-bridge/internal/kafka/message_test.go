@@ -53,6 +53,7 @@ func TestTransformEventBody_AssetOwnershipChange(t *testing.T) {
 	body := &bob.AssetOwnershipChangeBody{
 		SourcePublicKey:      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		DestinationPublicKey: "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		IssuerPublicKey:      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		AssetName:            "QX",
 		NumberOfShares:       500,
 	}
@@ -61,16 +62,19 @@ func TestTransformEventBody_AssetOwnershipChange(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["source"])
 	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["destination"])
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["assetIssuer"])
 	assert.Equal(t, "QX", result["assetName"])
 	assert.Equal(t, int64(500), result["numberOfShares"])
 	assert.Nil(t, result["sourcePublicKey"])
 	assert.Nil(t, result["destinationPublicKey"])
+	assert.Nil(t, result["issuerPublicKey"])
 }
 
 func TestTransformEventBody_AssetPossessionChange(t *testing.T) {
 	body := &bob.AssetPossessionChangeBody{
 		SourcePublicKey:      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		DestinationPublicKey: "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		IssuerPublicKey:      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		AssetName:            "CFB",
 		NumberOfShares:       200,
 	}
@@ -79,10 +83,12 @@ func TestTransformEventBody_AssetPossessionChange(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["source"])
 	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["destination"])
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["assetIssuer"])
 	assert.Equal(t, "CFB", result["assetName"])
 	assert.Equal(t, int64(200), result["numberOfShares"])
 	assert.Nil(t, result["sourcePublicKey"])
 	assert.Nil(t, result["destinationPublicKey"])
+	assert.Nil(t, result["issuerPublicKey"])
 }
 
 func TestTransformEventBody_Burning(t *testing.T) {

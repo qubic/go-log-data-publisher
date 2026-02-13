@@ -152,6 +152,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "sourcePublicKey": "<qubic_address>",
   "destinationPublicKey": "<qubic_address>",
+  "issuerPublicKey": "<qubic_address>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }
@@ -162,6 +163,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "source": "<bob_sourcePublicKey>",
   "destination": "<bob_destinationPublicKey>",
+  "assetIssuer": "<bob_issuerPublicKey>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }
@@ -173,6 +175,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "sourcePublicKey": "<qubic_address>",
   "destinationPublicKey": "<qubic_address>",
+  "issuerPublicKey": "<qubic_address>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }
@@ -183,6 +186,7 @@ Events with `"ok": false` are skipped by the processor.
 {
   "source": "<bob_sourcePublicKey>",
   "destination": "<bob_destinationPublicKey>",
+  "assetIssuer": "<bob_issuerPublicKey>",
   "assetName": "<string>",
   "numberOfShares": <int64>
 }

@@ -77,6 +77,7 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 		return map[string]any{
 			"source":         b.SourcePublicKey,
 			"destination":    b.DestinationPublicKey,
+			"assetIssuer":    b.IssuerPublicKey,
 			"assetName":      b.AssetName,
 			"numberOfShares": b.NumberOfShares,
 		}, nil
@@ -85,6 +86,7 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 		return map[string]any{
 			"source":         b.SourcePublicKey,
 			"destination":    b.DestinationPublicKey,
+			"assetIssuer":    b.IssuerPublicKey,
 			"assetName":      b.AssetName,
 			"numberOfShares": b.NumberOfShares,
 		}, nil

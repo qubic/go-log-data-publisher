@@ -36,6 +36,7 @@ type AssetIssuanceBody struct {
 type AssetOwnershipChangeBody struct {
 	SourcePublicKey      string `json:"sourcePublicKey"`
 	DestinationPublicKey string `json:"destinationPublicKey"`
+	IssuerPublicKey      string `json:"issuerPublicKey"`
 	AssetName            string `json:"assetName"`
 	NumberOfShares       int64  `json:"numberOfShares"`
 }
@@ -44,6 +45,7 @@ type AssetOwnershipChangeBody struct {
 type AssetPossessionChangeBody struct {
 	SourcePublicKey      string `json:"sourcePublicKey"`
 	DestinationPublicKey string `json:"destinationPublicKey"`
+	IssuerPublicKey      string `json:"issuerPublicKey"`
 	AssetName            string `json:"assetName"`
 	NumberOfShares       int64  `json:"numberOfShares"`
 }
