@@ -31,13 +31,15 @@ type Server struct {
 	httpServer   *http.Server
 	grpcListener net.Listener
 	logger       *zap.Logger
+	extraOpts    []grpc.ServerOption
 }
 
 // NewServer creates a new server instance
-func NewServer(storage *storage.Manager, logger *zap.Logger) *Server {
+func NewServer(storage *storage.Manager, logger *zap.Logger, extraOpts ...grpc.ServerOption) *Server {
 	return &Server{
-		service: NewEventsBridgeService(storage, logger),
-		logger:  logger,
+		service:   NewEventsBridgeService(storage, logger),
+		logger:    logger,
+		extraOpts: extraOpts,
 	}
 }
 
@@ -52,10 +54,12 @@ func (s *Server) Start(cfg ServerConfig) error {
 	}
 
 	// Create gRPC server
-	s.grpcServer = grpc.NewServer(
+	opts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
 		grpc.MaxSendMsgSize(cfg.MaxSendMsgSize),
-	)
+	}
+	opts = append(opts, s.extraOpts...)
+	s.grpcServer = grpc.NewServer(opts...)
 
 	// Register service
 	eventsbridge.RegisterEventsBridgeServiceServer(s.grpcServer, s.service)
