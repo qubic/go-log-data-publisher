@@ -31,7 +31,16 @@ type LogEventElastic struct {
 }
 
 func (lee *LogEventElastic) IsSupported() bool {
+
 	// qu transfer with zero amount is not supported
-	ok := !(lee.Type == 0 && lee.EmittingContractIndex == 0 && *lee.Amount == 0)
-	return ok
+	if lee.Type == 0 && lee.EmittingContractIndex == 0 && *lee.Amount == 0 {
+		return false
+	}
+
+	// burn events with zero amount are not supported
+	if lee.Type == 8 && *lee.Amount == 0 {
+		return false
+	}
+
+	return true
 }
