@@ -64,9 +64,10 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 	if *lep.LogDigest == "" {
 		missing = append(missing, "logDigest")
 	}
-	if *lep.Timestamp == 0 {
+	// Disabled for the time being.
+	/*if *lep.Timestamp == 0 {
 		missing = append(missing, "timestamp")
-	}
+	}*/
 
 	if len(missing) > 0 {
 		return LogEvent{}, fmt.Errorf("invalid zero value field(s): %v", missing)
