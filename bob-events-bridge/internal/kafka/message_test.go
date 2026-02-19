@@ -1,7 +1,6 @@
 package kafka
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -158,14 +157,6 @@ func TestTransformEventBody_UnsupportedType(t *testing.T) {
 }
 
 func TestBuildEventMessage(t *testing.T) {
-	logMsg := &bob.LogMessage{
-		Type:      bob.MessageTypeLog,
-		SCIndex:   0,
-		LogType:   0,
-		IsCatchUp: false,
-		Message:   json.RawMessage(`{}`),
-	}
-
 	payload := &bob.LogPayload{
 		OK:        true,
 		Epoch:     145,
@@ -184,7 +175,7 @@ func TestBuildEventMessage(t *testing.T) {
 		Amount: 1000,
 	}
 
-	msg, err := BuildEventMessage(logMsg, payload, body, 3)
+	msg, err := BuildEventMessage(0, payload, body, 3)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(3), msg.Index)
@@ -203,13 +194,6 @@ func TestBuildEventMessage(t *testing.T) {
 }
 
 func TestBuildEventMessage_NilBody(t *testing.T) {
-	logMsg := &bob.LogMessage{
-		Type:    bob.MessageTypeLog,
-		SCIndex: 0,
-		LogType: 0,
-		Message: json.RawMessage(`{}`),
-	}
-
 	payload := &bob.LogPayload{
 		OK:        true,
 		Epoch:     145,
@@ -221,7 +205,7 @@ func TestBuildEventMessage_NilBody(t *testing.T) {
 		TxHash:    "TXHASH",
 	}
 
-	msg, err := BuildEventMessage(logMsg, payload, nil, 0)
+	msg, err := BuildEventMessage(0, payload, nil, 0)
 	require.NoError(t, err)
 	assert.Nil(t, msg.Body)
 }

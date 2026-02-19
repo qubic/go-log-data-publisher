@@ -46,9 +46,10 @@ Bob Node (WebSocket) → Processor → Storage Manager → Epoch DBs (PebbleDB)
 - Keys are formatted as `<tick_padded_10>:<event_id_padded_20>` for ordered iteration
 - Persists state (epoch, lastLogID, lastTick) for crash recovery
 
-**Bob WebSocket Client** (`internal/bob/websocket.go`): Protocol implementation for bob's WebSocket API:
-- Message types: welcome, log, catchUpComplete, ack, pong, error
-- Subscription with catch-up from lastTick for crash recovery
+**Bob WebSocket Client** (`internal/bob/websocket.go`): Protocol implementation for bob's /ws/qubic JSON-RPC 2.0 WebSocket API:
+- Uses `qubic_subscribe` with `tickStream` for tick-based event streaming
+- Receives all logs for a tick in one `qubic_subscription` notification
+- Subscription with catch-up from startTick for crash recovery
 
 **gRPC Service** (`internal/grpc/`): Exposes two endpoints:
 - `GetStatus` (GET /v1/status): Returns epochs with tick intervals and event counts
@@ -57,7 +58,7 @@ Bob Node (WebSocket) → Processor → Storage Manager → Epoch DBs (PebbleDB)
 ### Configuration
 
 Environment variables prefixed with `BOB_EVENTS_`:
-- `BOB_EVENTS_BOB_WEBSOCKETURL` (default: `ws://localhost:40420/ws/logs`)
+- `BOB_EVENTS_BOB_WEBSOCKETURL` (default: `ws://localhost:40420/ws/qubic`)
 - `BOB_EVENTS_BOB_LOGTYPES` (default: `0 1 2 3 8 13` - space-separated log type IDs)
 - `BOB_EVENTS_STORAGE_BASEPATH` (default: `data/bob-events-bridge`)
 - `BOB_EVENTS_SERVER_GRPCADDR` (default: `0.0.0.0:8001`)

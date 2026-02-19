@@ -1,7 +1,6 @@
 package bob
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -29,105 +28,96 @@ func NewWSClient(url string, logger *zap.Logger) *WSClient {
 	}
 }
 
-// Connect establishes the WebSocket connection
-func (c *WSClient) Connect(ctx context.Context) (*WelcomeMessage, error) {
+// Connect establishes the WebSocket connection to bob's /ws/qubic endpoint.
+// Unlike the old /ws/logs, there is no welcome message on connect.
+func (c *WSClient) Connect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.connected {
-		return nil, fmt.Errorf("already connected")
+		return fmt.Errorf("already connected")
 	}
 
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 	}
 
-	conn, _, err := dialer.DialContext(ctx, c.url, nil)
+	conn, _, err := dialer.Dial(c.url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
+		return fmt.Errorf("failed to connect: %w", err)
 	}
 
 	c.conn = conn
 	c.connected = true
 
-	// Read the welcome message
-	_, msg, err := conn.ReadMessage()
-	if err != nil {
-		_ = c.conn.Close()
-		c.connected = false
-		return nil, fmt.Errorf("failed to read welcome message: %w", err)
-	}
+	c.logger.Info("Connected to bob", zap.String("url", c.url))
 
-	var welcome WelcomeMessage
-	if err := json.Unmarshal(msg, &welcome); err != nil {
-		_ = c.conn.Close()
-		c.connected = false
-		return nil, fmt.Errorf("failed to parse welcome message: %w", err)
-	}
-
-	if welcome.Type != MessageTypeWelcome {
-		_ = c.conn.Close()
-		c.connected = false
-		return nil, fmt.Errorf("expected welcome message, got: %s", welcome.Type)
-	}
-
-	c.logger.Info("Connected to bob",
-		zap.Uint32("currentVerifiedTick", welcome.CurrentVerifiedTick),
-		zap.Uint16("currentEpoch", welcome.CurrentEpoch))
-
-	return &welcome, nil
+	return nil
 }
 
-// Subscribe sends subscription requests with optional resumption from lastTick.
-// Each subscription is sent individually with scIndex + logType.
-// The lastTick param is only sent on the FIRST subscription since catch-up
-// happens once from that tick boundary.
-func (c *WSClient) Subscribe(subscriptions []SubscriptionEntry, lastTick *uint32) error {
+// Subscribe sends a JSON-RPC 2.0 qubic_subscribe request for tickStream
+// and returns the subscription ID from the response.
+func (c *WSClient) Subscribe(logFilters []LogFilter, startTick uint32) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if !c.connected {
-		return fmt.Errorf("not connected")
+		return "", fmt.Errorf("not connected")
 	}
 
-	// Send individual subscription for each log type
-	// Only include lastTick on the FIRST subscription
-	// (catch-up only needs to happen once from that tick boundary)
-	for i, sub := range subscriptions {
-		scIndex := sub.SCIndex
-		logType := sub.LogType
-
-		req := SubscribeRequest{
-			Action:  "subscribe",
-			SCIndex: &scIndex,
-			LogType: &logType,
-		}
-
-		// Only add lastTick on the first subscription
-		if i == 0 && lastTick != nil && *lastTick > 0 {
-			req.LastTick = lastTick
-		}
-
-		data, err := json.Marshal(req)
-		if err != nil {
-			return fmt.Errorf("failed to marshal subscribe request: %w", err)
-		}
-
-		if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
-			return fmt.Errorf("failed to send subscribe request: %w", err)
-		}
-
-		c.logger.Debug("Sent subscription",
-			zap.Uint32("scIndex", scIndex),
-			zap.Uint32("logType", logType),
-			zap.Bool("withResume", i == 0 && lastTick != nil))
+	params := TickStreamSubscribeParams{
+		LogFilters:     logFilters,
+		ExcludeTxs:     true,
+		SkipEmptyTicks: true,
+	}
+	if startTick > 0 {
+		params.StartTick = startTick
 	}
 
-	c.logger.Info("Sent subscription requests",
-		zap.Int("numSubscriptions", len(subscriptions)),
-		zap.Uint32p("lastTick", lastTick))
+	req := JsonRpcRequest{
+		JsonRpc: "2.0",
+		ID:      1,
+		Method:  "qubic_subscribe",
+		Params:  []interface{}{"tickStream", params},
+	}
 
-	return nil
+	data, err := json.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal subscribe request: %w", err)
+	}
+
+	if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		return "", fmt.Errorf("failed to send subscribe request: %w", err)
+	}
+
+	c.logger.Info("Sent tickStream subscription",
+		zap.Int("numFilters", len(logFilters)),
+		zap.Uint32("startTick", startTick))
+
+	// Read the JSON-RPC response to get subscription ID
+	_, msg, err := c.conn.ReadMessage()
+	if err != nil {
+		return "", fmt.Errorf("failed to read subscribe response: %w", err)
+	}
+
+	var resp JsonRpcResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		return "", fmt.Errorf("failed to parse subscribe response: %w", err)
+	}
+
+	if resp.Error != nil {
+		return "", fmt.Errorf("subscribe error (code %d): %s", resp.Error.Code, resp.Error.Message)
+	}
+
+	var subscriptionID string
+	if err := json.Unmarshal(resp.Result, &subscriptionID); err != nil {
+		return "", fmt.Errorf("failed to parse subscription ID: %w", err)
+	}
+
+	c.logger.Info("Subscribed to tickStream",
+		zap.String("subscriptionID", subscriptionID))
+
+	return subscriptionID, nil
 }
 
 // ReadMessage reads the next message from the WebSocket
@@ -146,24 +136,6 @@ func (c *WSClient) ReadMessage() ([]byte, error) {
 	}
 
 	return msg, nil
-}
-
-// SendPing sends an application-level ping
-func (c *WSClient) SendPing() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.connected {
-		return fmt.Errorf("not connected")
-	}
-
-	req := PingRequest{Action: "ping"}
-	data, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-
-	return c.conn.WriteMessage(websocket.TextMessage, data)
 }
 
 // Close closes the WebSocket connection

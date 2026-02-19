@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	eventsbridge "github.com/qubic/bob-events-bridge/api/events-bridge/v1"
+	"github.com/qubic/bob-events-bridge/internal/bob"
 	"github.com/qubic/bob-events-bridge/internal/config"
 	"github.com/qubic/bob-events-bridge/internal/grpc"
 	"github.com/qubic/bob-events-bridge/internal/kafka"
@@ -75,16 +76,22 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err, "Timeout waiting for subscription")
 
-	// 6. Send event
+	// 6. Send event via tickStream
 	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 1000,
 	})
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
-	require.NoError(t, err, "Failed to send log message")
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
+	require.NoError(t, err, "Failed to send tickStream result")
 
-	mockBob.SendCatchUpComplete(0, 1, 1)
+	mockBob.SendCatchUpComplete()
 
 	// 7. Wait for storage
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -128,18 +135,25 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send 5 events for the same tick
+	// Send 5 events for the same tick in one tickStream message
 	tick := uint32(22000001)
+	var logs []bob.LogPayload
 	for i := uint64(1); i <= 5; i++ {
-		payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+		logs = append(logs, CreateLogPayload(145, tick, i, 0, map[string]any{
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		})
-		err = mockBob.SendLogMessage(payload, 0, 0, false)
-		require.NoError(t, err)
+		}))
 	}
-	mockBob.SendCatchUpComplete(0, 5, 5)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tick,
+		TotalLogs:    5,
+		FilteredLogs: 5,
+		Logs:         logs,
+	})
+	require.NoError(t, err)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for all events
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -193,17 +207,29 @@ func TestE2E_EpochTransition(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send events in epoch 145
+	// Send event in epoch 145
 	payload1 := CreateLogPayload(145, 22000001, 1, 0, nil)
-	err = mockBob.SendLogMessage(payload1, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload1},
+	})
 	require.NoError(t, err)
 
-	// Send events in epoch 146 (epoch transition)
+	// Send event in epoch 146 (epoch transition)
 	payload2 := CreateLogPayload(146, 22500001, 2, 0, nil)
-	err = mockBob.SendLogMessage(payload2, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        146,
+		Tick:         22500001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload2},
+	})
 	require.NoError(t, err)
 
-	mockBob.SendCatchUpComplete(0, 2, 2)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for both events
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -256,17 +282,23 @@ func TestE2E_Deduplication(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send the same event twice
+	// Send the event
 	payload := CreateLogPayload(145, 22000001, 1, 0, map[string]any{
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 500,
 	})
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
 
 	// Flush the batch so the first event is stored
-	mockBob.SendCatchUpComplete(0, 1, 1)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for first event
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -275,9 +307,15 @@ func TestE2E_Deduplication(t *testing.T) {
 	}, "first event should be stored")
 
 	// Send duplicate
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
-	mockBob.SendCatchUpComplete(0, 1, 2)
+	mockBob.SendCatchUpComplete()
 
 	// Give some time for the duplicate to be processed
 	time.Sleep(100 * time.Millisecond)
@@ -307,11 +345,17 @@ func TestE2E_StatePersistence(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send events
+	// Send event
 	payload := CreateLogPayload(145, 22000100, 42, 0, nil)
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000100,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
-	mockBob.SendCatchUpComplete(0, 42, 1)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for storage
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -357,9 +401,15 @@ func TestE2E_CrashRecovery(t *testing.T) {
 
 		// Send event
 		payload := CreateLogPayload(145, 22000050, 10, 0, nil)
-		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+			Epoch:        145,
+			Tick:         22000050,
+			TotalLogs:    1,
+			FilteredLogs: 1,
+			Logs:         []bob.LogPayload{payload},
+		})
 		require.NoError(t, err)
-		mockBob.SendCatchUpComplete(0, 10, 1)
+		mockBob.SendCatchUpComplete()
 
 		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
 			exists, _ := storageMgr.HasEvent(145, 22000050, 10)
@@ -389,11 +439,11 @@ func TestE2E_CrashRecovery(t *testing.T) {
 		_ = storageMgr2.Close()
 	}()
 
-	// Wait for subscription and check it has lastTick set
-	subReq, err := mockBob2.WaitForSubscription(5 * time.Second)
+	// Wait for subscription and check it has startTick set
+	subParams, err := mockBob2.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
-	require.NotNil(t, subReq.LastTick, "Subscription should include lastTick for resumption")
-	require.Equal(t, uint32(22000050), *subReq.LastTick)
+	// startTick should be lastTick+1 = 22000051 (inclusive start for tickStream)
+	require.Equal(t, uint32(22000051), subParams.StartTick)
 
 	// Verify original event is still accessible
 	_, events, err := storageMgr2.GetEventsForTick(22000050)
@@ -425,13 +475,19 @@ func TestE2E_GetStatus(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send events across tick range
+	// Send events across tick range — one tickStream message per tick
 	for tick := uint32(22000001); tick <= 22000005; tick++ {
 		payload := CreateLogPayload(145, tick, uint64(tick-22000000), 0, nil)
-		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+			Epoch:        145,
+			Tick:         tick,
+			TotalLogs:    1,
+			FilteredLogs: 1,
+			Logs:         []bob.LogPayload{payload},
+		})
 		require.NoError(t, err)
 	}
-	mockBob.SendCatchUpComplete(0, 5, 5)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for all events and state cache to be consistent
 	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
@@ -489,9 +545,15 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	}
 
 	payload := CreateLogPayload(145, 22000001, 1, 0, transferBody)
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
-	mockBob.SendCatchUpComplete(0, 1, 1)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for storage
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -539,16 +601,28 @@ func TestE2E_NonOKLogsSkipped(t *testing.T) {
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Send non-OK log (should be skipped)
+	// Send non-OK log and OK log in the same tick
 	nonOKPayload := CreateNonOKLogPayload(145, 22000001, 1)
-	err = mockBob.SendLogMessage(nonOKPayload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{nonOKPayload},
+	})
 	require.NoError(t, err)
 
 	// Send OK log
 	okPayload := CreateLogPayload(145, 22000002, 2, 0, nil)
-	err = mockBob.SendLogMessage(okPayload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000002,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{okPayload},
+	})
 	require.NoError(t, err)
-	mockBob.SendCatchUpComplete(0, 2, 2)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for OK event
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -596,26 +670,25 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 		_ = storageMgr.Close()
 	}()
 
-	// Wait for all subscriptions (3 expected)
-	for i := 0; i < 3; i++ {
-		_, err = mockBob.WaitForSubscription(5 * time.Second)
-		require.NoError(t, err)
-	}
+	// Only 1 subscription now (single tickStream subscribe with all log filters)
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
 
-	// Send events from different log types
+	// Send events from different log types in one tick
 	payload0 := CreateLogPayload(145, 22000001, 1, 0, nil) // qu_transfer
-	err = mockBob.SendLogMessage(payload0, 0, 0, false)
-	require.NoError(t, err)
-
 	payload1 := CreateLogPayload(145, 22000001, 2, 1, nil) // asset_issuance
-	err = mockBob.SendLogMessage(payload1, 0, 1, false)
-	require.NoError(t, err)
-
 	payload2 := CreateLogPayload(145, 22000001, 3, 2, nil) // asset_ownership_change
-	err = mockBob.SendLogMessage(payload2, 0, 2, false)
+
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    3,
+		FilteredLogs: 3,
+		Logs:         []bob.LogPayload{payload0, payload1, payload2},
+	})
 	require.NoError(t, err)
 
-	mockBob.SendCatchUpComplete(0, 3, 3)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for all events
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -664,29 +737,43 @@ func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
 
 	// Send 2 events for tick A
 	tickA := uint32(22000001)
+	var logsA []bob.LogPayload
 	for i := uint64(1); i <= 2; i++ {
-		payload := CreateLogPayload(145, tickA, i, 0, map[string]any{
+		logsA = append(logsA, CreateLogPayload(145, tickA, i, 0, map[string]any{
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		})
-		err = mockBob.SendLogMessage(payload, 0, 0, false)
-		require.NoError(t, err)
+		}))
 	}
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tickA,
+		TotalLogs:    2,
+		FilteredLogs: 2,
+		Logs:         logsA,
+	})
+	require.NoError(t, err)
 
 	// Send 3 events for tick B
 	tickB := uint32(22000002)
+	var logsB []bob.LogPayload
 	for i := uint64(3); i <= 5; i++ {
-		payload := CreateLogPayload(145, tickB, i, 0, map[string]any{
+		logsB = append(logsB, CreateLogPayload(145, tickB, i, 0, map[string]any{
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		})
-		err = mockBob.SendLogMessage(payload, 0, 0, false)
-		require.NoError(t, err)
+		}))
 	}
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tickB,
+		TotalLogs:    3,
+		FilteredLogs: 3,
+		Logs:         logsB,
+	})
+	require.NoError(t, err)
 
-	mockBob.SendCatchUpComplete(0, 5, 5)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for all events
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -744,16 +831,23 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send 2 events
+		var logs []bob.LogPayload
 		for i := uint64(1); i <= 2; i++ {
-			payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+			logs = append(logs, CreateLogPayload(145, tick, i, 0, map[string]any{
 				"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 				"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 				"amount": i,
-			})
-			err = mockBob.SendLogMessage(payload, 0, 0, false)
-			require.NoError(t, err)
+			}))
 		}
-		mockBob.SendCatchUpComplete(0, 2, 2)
+		err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+			Epoch:        145,
+			Tick:         tick,
+			TotalLogs:    2,
+			FilteredLogs: 2,
+			Logs:         logs,
+		})
+		require.NoError(t, err)
+		mockBob.SendCatchUpComplete()
 
 		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
 			_, events, _ := storageMgr.GetEventsForTick(tick)
@@ -786,26 +880,29 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 	_, err = mockBob2.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Resend the 2 duplicate events (should be deduplicated)
+	// Resend the 2 duplicate events + 1 new event in one tickStream message
+	var logs []bob.LogPayload
 	for i := uint64(1); i <= 2; i++ {
-		payload := CreateLogPayload(145, tick, i, 0, map[string]any{
+		logs = append(logs, CreateLogPayload(145, tick, i, 0, map[string]any{
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		})
-		err = mockBob2.SendLogMessage(payload, 0, 0, false)
-		require.NoError(t, err)
+		}))
 	}
-
-	// Send 1 new event for the same tick
-	newPayload := CreateLogPayload(145, tick, 3, 0, map[string]any{
+	logs = append(logs, CreateLogPayload(145, tick, 3, 0, map[string]any{
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 3,
+	}))
+	err = mockBob2.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tick,
+		TotalLogs:    3,
+		FilteredLogs: 3,
+		Logs:         logs,
 	})
-	err = mockBob2.SendLogMessage(newPayload, 0, 0, false)
 	require.NoError(t, err)
-	mockBob2.SendCatchUpComplete(0, 3, 3)
+	mockBob2.SendCatchUpComplete()
 
 	// Wait for the new event
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -858,9 +955,15 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 1000,
 	}, uint64(1718461800))
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
-	mockBob.SendCatchUpComplete(0, 1, 1)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for storage (implies Kafka was published first)
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -918,10 +1021,9 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		_ = storageMgr.Close()
 	}()
 
-	for i := 0; i < len(subs); i++ {
-		_, err = mockBob.WaitForSubscription(5 * time.Second)
-		require.NoError(t, err)
-	}
+	// Only 1 subscription now (single tickStream subscribe)
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
 
 	tick := uint32(22000001)
 
@@ -931,7 +1033,6 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 500,
 	}, uint64(1718461800))
-	require.NoError(t, mockBob.SendLogMessage(p0, 0, 0, false))
 
 	// Type 1: asset_issuance
 	p1 := CreateLogPayloadWithTimestamp(145, tick, 2, 1, map[string]any{
@@ -942,7 +1043,6 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"numberOfDecimalPlaces": 0,
 		"unitOfMeasurement":     "shares",
 	}, uint64(1718461800))
-	require.NoError(t, mockBob.SendLogMessage(p1, 0, 1, false))
 
 	// Type 2: asset_ownership_change
 	p2 := CreateLogPayloadWithTimestamp(145, tick, 3, 2, map[string]any{
@@ -952,7 +1052,6 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"assetName":            "QX",
 		"numberOfShares":       200,
 	}, uint64(1718461800))
-	require.NoError(t, mockBob.SendLogMessage(p2, 0, 2, false))
 
 	// Type 3: asset_possession_change
 	p3 := CreateLogPayloadWithTimestamp(145, tick, 4, 3, map[string]any{
@@ -962,7 +1061,6 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"assetName":            "CFB",
 		"numberOfShares":       300,
 	}, uint64(1718461800))
-	require.NoError(t, mockBob.SendLogMessage(p3, 0, 3, false))
 
 	// Type 8: burning
 	p8 := CreateLogPayloadWithTimestamp(145, tick, 5, 8, map[string]any{
@@ -970,7 +1068,6 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"amount":                 999,
 		"contractIndexBurnedFor": 7,
 	}, uint64(1718461800))
-	require.NoError(t, mockBob.SendLogMessage(p8, 0, 8, false))
 
 	// Type 13: contract_reserve_deduction
 	p13 := CreateLogPayloadWithTimestamp(145, tick, 6, 13, map[string]any{
@@ -978,9 +1075,17 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		"remainingAmount": 95000,
 		"contractIndex":   3,
 	}, uint64(1718461800))
-	require.NoError(t, mockBob.SendLogMessage(p13, 0, 13, false))
 
-	mockBob.SendCatchUpComplete(0, 6, 6)
+	// Send all events in one tickStream message
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tick,
+		TotalLogs:    6,
+		FilteredLogs: 6,
+		Logs:         []bob.LogPayload{p0, p1, p2, p3, p8, p13},
+	})
+	require.NoError(t, err)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for all events to be stored
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -1051,11 +1156,17 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 1000,
 	}, uint64(1718461800))
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
 
 	// Send catchUpComplete to trigger batch flush (and thus Kafka failure)
-	mockBob.SendCatchUpComplete(0, 1, 1)
+	mockBob.SendCatchUpComplete()
 
 	// Wait for the processor to reconnect (it will disconnect after Kafka failure)
 	// The mock server accepts new connections, so we wait for a second subscription
@@ -1067,11 +1178,17 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Resend the event (bob resends on reconnect)
-	err = mockBob.SendLogMessage(payload, 0, 0, false)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
 	// Small delay to ensure event is delivered before catchUpComplete
 	time.Sleep(50 * time.Millisecond)
-	mockBob.SendCatchUpComplete(0, 1, 1)
+	mockBob.SendCatchUpComplete()
 
 	// Now Kafka should succeed and event should be stored
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -1086,8 +1203,6 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 
 // TestE2E_IndexResetAfterDeduplication tests that IndexInTick resets to 0 for a new tick
 // even when all events from the previous tick were deduplicated (pendingBatch is nil).
-// This was a bug where tickEventIndex was recovered for lastTick but not reset when
-// transitioning to a new tick if pendingBatch was nil.
 func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 	tempDir := t.TempDir()
 	tickOld := uint32(22000050) // Previous tick
@@ -1113,16 +1228,23 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send 3 events for tickOld
+		var logs []bob.LogPayload
 		for i := uint64(1); i <= 3; i++ {
-			payload := CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
+			logs = append(logs, CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
 				"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 				"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 				"amount": i,
-			}, uint64(1718461800))
-			err = mockBob.SendLogMessage(payload, 0, 0, false)
-			require.NoError(t, err)
+			}, uint64(1718461800)))
 		}
-		mockBob.SendCatchUpComplete(0, 3, 3)
+		err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+			Epoch:        145,
+			Tick:         tickOld,
+			TotalLogs:    3,
+			FilteredLogs: 3,
+			Logs:         logs,
+		})
+		require.NoError(t, err)
+		mockBob.SendCatchUpComplete()
 
 		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
 			_, events, _ := storageMgr.GetEventsForTick(tickOld)
@@ -1165,28 +1287,41 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 	require.NoError(t, err)
 
 	// Resend the 3 events for tickOld (these will be deduplicated - already in storage)
-	// This simulates bob's catch-up behavior after reconnect
+	var logsOld []bob.LogPayload
 	for i := uint64(1); i <= 3; i++ {
-		payload := CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
+		logsOld = append(logsOld, CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		}, uint64(1718461800))
-		err = mockBob2.SendLogMessage(payload, 0, 0, false)
-		require.NoError(t, err)
+		}, uint64(1718461800)))
 	}
+	err = mockBob2.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tickOld,
+		TotalLogs:    3,
+		FilteredLogs: 3,
+		Logs:         logsOld,
+	})
+	require.NoError(t, err)
 
 	// Now send 2 events for tickNew (these should get index 0, 1 - NOT 3, 4)
+	var logsNew []bob.LogPayload
 	for i := uint64(4); i <= 5; i++ {
-		payload := CreateLogPayloadWithTimestamp(145, tickNew, i, 0, map[string]any{
+		logsNew = append(logsNew, CreateLogPayloadWithTimestamp(145, tickNew, i, 0, map[string]any{
 			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": i,
-		}, uint64(1718461801))
-		err = mockBob2.SendLogMessage(payload, 0, 0, false)
-		require.NoError(t, err)
+		}, uint64(1718461801)))
 	}
-	mockBob2.SendCatchUpComplete(0, 5, 5)
+	err = mockBob2.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tickNew,
+		TotalLogs:    2,
+		FilteredLogs: 2,
+		Logs:         logsNew,
+	})
+	require.NoError(t, err)
+	mockBob2.SendCatchUpComplete()
 
 	// Wait for the new events to be stored
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
@@ -1246,9 +1381,15 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 			"amount": 1000,
 		}, uint64(1718461800))
-		err = mockBob.SendLogMessage(payload, 0, 0, false)
+		err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+			Epoch:        145,
+			Tick:         tick,
+			TotalLogs:    1,
+			FilteredLogs: 1,
+			Logs:         []bob.LogPayload{payload},
+		})
 		require.NoError(t, err)
-		mockBob.SendCatchUpComplete(0, 1, 1)
+		mockBob.SendCatchUpComplete()
 
 		WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
 			exists, _ := storageMgr.HasEvent(145, tick, 1)
@@ -1291,7 +1432,13 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 1000,
 	}, uint64(1718461800))
-	err = mockBob2.SendLogMessage(payload, 0, 0, false)
+	err = mockBob2.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tick,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
 	require.NoError(t, err)
 
 	// Send a new event to confirm processing continues
@@ -1300,9 +1447,15 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"amount": 2000,
 	}, uint64(1718461801))
-	err = mockBob2.SendLogMessage(payload2, 0, 0, false)
+	err = mockBob2.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         tick,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload2},
+	})
 	require.NoError(t, err)
-	mockBob2.SendCatchUpComplete(0, 2, 2)
+	mockBob2.SendCatchUpComplete()
 
 	// Wait for the new event
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {

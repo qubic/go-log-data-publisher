@@ -83,8 +83,8 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 	}
 }
 
-// BuildEventMessage assembles a full Kafka EventMessage from bob message components.
-func BuildEventMessage(logMsg *bob.LogMessage, payload *bob.LogPayload, parsedBody interface{}, indexInTick uint32) (*EventMessage, error) {
+// BuildEventMessage assembles a full Kafka EventMessage from bob log payload components.
+func BuildEventMessage(scIndex uint32, payload *bob.LogPayload, parsedBody interface{}, indexInTick uint32) (*EventMessage, error) {
 	body, err := TransformEventBody(payload.Type, parsedBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transform event body: %w", err)
@@ -92,8 +92,8 @@ func BuildEventMessage(logMsg *bob.LogMessage, payload *bob.LogPayload, parsedBo
 
 	return &EventMessage{
 		Index:                 uint64(indexInTick),
-		EmittingContractIndex: logMsg.SCIndex,
-		Type:                  logMsg.LogType,
+		EmittingContractIndex: scIndex,
+		Type:                  payload.Type,
 		TickNumber:            payload.Tick,
 		Epoch:                 uint32(payload.Epoch),
 		LogDigest:             payload.LogDigest,
