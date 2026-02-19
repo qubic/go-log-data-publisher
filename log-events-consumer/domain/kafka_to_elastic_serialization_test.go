@@ -30,10 +30,6 @@ func TestLogEvent_Integration(t *testing.T) {
 			expected: "testdata/elastic/burn-with-transaction.json",
 		},
 		{
-			filename: "testdata/kafka/burn-zero-amount.json",
-			expected: "testdata/elastic/burn-zero-amount.json",
-		},
-		{
 			filename: "testdata/kafka/contract-reserve-deduction-begin-tick.json",
 			expected: "testdata/elastic/contract-reserve-deduction-begin-tick.json",
 		},

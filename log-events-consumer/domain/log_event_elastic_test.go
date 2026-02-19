@@ -26,6 +26,18 @@ func TestLogEventElastic_IsSupported(t *testing.T) {
 			amount:    0,
 			want:      false,
 		},
+		{
+			name:      "Type 8 with positive amount is supported",
+			eventType: 8,
+			amount:    1,
+			want:      true,
+		},
+		{
+			name:      "Type 8 with amount 0 is not supported",
+			eventType: 8,
+			amount:    0,
+			want:      false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
