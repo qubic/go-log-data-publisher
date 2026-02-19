@@ -12,7 +12,6 @@ import (
 
 	grpcProm "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/qubic/bob-events-bridge/internal/config"
 	bridgeGrpc "github.com/qubic/bob-events-bridge/internal/grpc"
@@ -60,10 +59,6 @@ func main() {
 	}
 
 	promReg := prometheus.DefaultRegisterer
-
-	// Register Go runtime metrics (memory, goroutines, GC, etc.)
-	promReg.MustRegister(collectors.NewGoCollector())
-	promReg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	grpcMetrics := grpcProm.NewServerMetrics(
 		grpcProm.WithServerCounterOptions(grpcProm.WithConstLabels(prometheus.Labels{"namespace": cfg.Metrics.Namespace})),
