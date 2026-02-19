@@ -74,9 +74,10 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	if lee.LogId == 0 {
 		invalid = append(invalid, "logId")
 	}
-	if lee.Timestamp == 0 {
+	// Disabled for the time being.
+	/*if lee.Timestamp == 0 {
 		invalid = append(invalid, "timestamp")
-	}
+	}*/
 	if lee.LogDigest == "" {
 		invalid = append(invalid, "logDigest")
 	}
