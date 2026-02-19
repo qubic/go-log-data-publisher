@@ -15,6 +15,15 @@ const (
 	LogTypeContractReserveDeduction uint32 = 13
 )
 
+var LogTypeNames = map[uint32]string{
+	LogTypeQuTransfer:               "qu_transfer",
+	LogTypeAssetIssuance:            "asset_issuance",
+	LogTypeAssetOwnershipChange:     "asset_ownership_change",
+	LogTypeAssetPossessionChange:    "asset_possession_change",
+	LogTypeBurning:                  "burning",
+	LogTypeContractReserveDeduction: "contract_reserve_deduction",
+}
+
 // QuTransferBody represents the body of a qu_transfer event (log type 0)
 type QuTransferBody struct {
 	From   string `json:"from"`
@@ -111,4 +120,12 @@ func EventBodyToMap(body interface{}) (map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+func GetLogTypeName(eventType uint32) string {
+	name, ok := LogTypeNames[eventType]
+	if !ok {
+		return "unknown"
+	}
+	return name
 }

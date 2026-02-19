@@ -3,19 +3,26 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
+	grpcProm "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/qubic/bob-events-bridge/internal/config"
-	"github.com/qubic/bob-events-bridge/internal/grpc"
+	bridgeGrpc "github.com/qubic/bob-events-bridge/internal/grpc"
 	"github.com/qubic/bob-events-bridge/internal/kafka"
+	"github.com/qubic/bob-events-bridge/internal/metrics"
 	"github.com/qubic/bob-events-bridge/internal/processor"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	googleGrpc "google.golang.org/grpc"
 )
 
 func main() {
@@ -52,6 +59,19 @@ func main() {
 			zap.Uint32("startTick", cfg.Bob.StartTick))
 	}
 
+	promReg := prometheus.DefaultRegisterer
+
+	// Register Go runtime metrics (memory, goroutines, GC, etc.)
+	promReg.MustRegister(collectors.NewGoCollector())
+	promReg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
+	grpcMetrics := grpcProm.NewServerMetrics(
+		grpcProm.WithServerCounterOptions(grpcProm.WithConstLabels(prometheus.Labels{"namespace": cfg.Metrics.Namespace})),
+	)
+	promReg.MustRegister(grpcMetrics)
+
+	bridgeMetrics := metrics.NewBridgeMetrics(promReg, cfg.Metrics.Namespace)
+
 	// Parse subscriptions
 	subscriptions, err := cfg.GetSubscriptions()
 	if err != nil {
@@ -70,8 +90,11 @@ func main() {
 		zap.Strings("epochs", epochsToStrings(storageMgr.GetAvailableEpochs())))
 
 	// Create and start gRPC server
-	server := grpc.NewServer(storageMgr, logger)
-	if err := server.Start(grpc.ServerConfig{
+	server := bridgeGrpc.NewServer(storageMgr, logger,
+		googleGrpc.UnaryInterceptor(grpcMetrics.UnaryServerInterceptor()),
+		googleGrpc.StreamInterceptor(grpcMetrics.StreamServerInterceptor()),
+	)
+	if err := server.Start(bridgeGrpc.ServerConfig{
 		GRPCAddr: cfg.Server.GRPCAddr,
 		HTTPAddr: cfg.Server.HTTPAddr,
 	}); err != nil {
@@ -84,7 +107,7 @@ func main() {
 	var kafkaPublisher kafka.Publisher
 	if cfg.Kafka.Enabled {
 		brokers := strings.Split(cfg.Kafka.Brokers, ",")
-		kafkaPublisher = kafka.NewProducer(brokers, cfg.Kafka.Topic, logger)
+		kafkaPublisher = kafka.NewProducer(brokers, cfg.Kafka.Topic, logger, bridgeMetrics)
 		defer kafkaPublisher.Close() //nolint:errcheck
 		logger.Info("Kafka publisher enabled",
 			zap.Strings("brokers", brokers),
@@ -92,7 +115,7 @@ func main() {
 	}
 
 	// Create processor
-	proc := processor.NewProcessor(cfg, subscriptions, storageMgr, logger, kafkaPublisher)
+	proc := processor.NewProcessor(cfg, subscriptions, storageMgr, logger, kafkaPublisher, bridgeMetrics)
 
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -102,6 +125,30 @@ func main() {
 	processorDone := make(chan error, 1)
 	go func() {
 		processorDone <- proc.Start(ctx)
+	}()
+
+	// Start metrics server
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(`{"status":"UP"}`)); err != nil {
+			logger.Error("Failed to write health response", zap.Error(err))
+		}
+	})
+
+	metricsServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Metrics.Port),
+		Handler: mux,
+	}
+
+	metricsErr := make(chan error, 1)
+	go func() {
+		logger.Info("Metrics server started", zap.Int("port", cfg.Metrics.Port))
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			metricsErr <- err
+		}
 	}()
 
 	// Wait for shutdown signal
@@ -115,6 +162,8 @@ func main() {
 		if err != nil && err != context.Canceled {
 			logger.Error("Processor stopped with error", zap.Error(err))
 		}
+	case err := <-metricsErr:
+		logger.Error("Metrics server stopped with error", zap.Error(err))
 	}
 
 	// Graceful shutdown
@@ -130,8 +179,14 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
+	// Stop gRPC server
 	if err := server.Stop(shutdownCtx); err != nil {
-		logger.Error("Error during server shutdown", zap.Error(err))
+		logger.Error("Error during gRPC server shutdown", zap.Error(err))
+	}
+
+	// Stop metrics server
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("Error during metrics server shutdown", zap.Error(err))
 	}
 
 	// Log final stats

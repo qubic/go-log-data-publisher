@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/pebble"
@@ -61,7 +62,7 @@ func ParseKey(key []byte) (tick uint32, logID uint64, err error) {
 func (e *EpochDB) HasEvent(tick uint32, logID uint64) (bool, error) {
 	key := FormatKey(tick, logID)
 	_, closer, err := e.db.Get(key)
-	if err == pebble.ErrNotFound {
+	if errors.Is(err, pebble.ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
@@ -166,4 +167,3 @@ func (e *EpochDB) GetEventsForTick(tick uint32) ([]*eventsbridge.Event, error) {
 
 	return events, nil
 }
-

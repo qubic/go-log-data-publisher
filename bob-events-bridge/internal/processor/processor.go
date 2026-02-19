@@ -11,6 +11,7 @@ import (
 	"github.com/qubic/bob-events-bridge/internal/bob"
 	"github.com/qubic/bob-events-bridge/internal/config"
 	"github.com/qubic/bob-events-bridge/internal/kafka"
+	"github.com/qubic/bob-events-bridge/internal/metrics"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -33,6 +34,7 @@ type Processor struct {
 	logger        *zap.Logger
 	client        *bob.WSClient
 	publisher     kafka.Publisher // nil if Kafka disabled
+	metrics       *metrics.BridgeMetrics
 
 	mu             sync.RWMutex
 	running        bool
@@ -47,13 +49,14 @@ type Processor struct {
 }
 
 // NewProcessor creates a new event processor
-func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher) *Processor {
+func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher, metrics *metrics.BridgeMetrics) *Processor {
 	return &Processor{
 		cfg:           cfg,
 		subscriptions: subscriptions,
 		storage:       storage,
 		logger:        logger,
 		publisher:     publisher,
+		metrics:       metrics,
 	}
 }
 
@@ -67,6 +70,7 @@ func (p *Processor) Start(ctx context.Context) error {
 
 	if state.HasState {
 		p.currentEpoch = state.CurrentEpoch
+		p.metrics.SetCurrentEpoch(uint16(state.CurrentEpoch))
 		p.lastLogID = state.LastLogID
 		p.lastTick = state.LastTick
 		p.logger.Info("Resuming from saved state",
@@ -112,11 +116,14 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.running = true
 	p.mu.Unlock()
 
+	p.metrics.SetProcessorRunning(true)
+
 	// Run the main processing loop with reconnection logic
 	for {
 		select {
 		case <-ctx.Done():
 			p.logger.Info("Context cancelled, stopping processor")
+			p.metrics.SetProcessorRunning(false)
 			return ctx.Err()
 		default:
 		}
@@ -129,6 +136,7 @@ func (p *Processor) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(5 * time.Second):
+				p.metrics.IncProcessorReconnections()
 				continue
 			}
 		}
@@ -141,6 +149,8 @@ func (p *Processor) Stop() {
 	p.running = false
 	p.mu.Unlock()
 
+	p.metrics.SetProcessorRunning(false)
+
 	if p.client != nil {
 		_ = p.client.Close()
 	}
@@ -148,6 +158,7 @@ func (p *Processor) Stop() {
 
 // connectAndProcess handles a single connection session
 func (p *Processor) connectAndProcess(ctx context.Context) error {
+
 	// Create WebSocket client
 	p.client = bob.NewWSClient(p.cfg.Bob.WebSocketURL, p.logger)
 
@@ -164,6 +175,7 @@ func (p *Processor) connectAndProcess(ctx context.Context) error {
 	// Update current epoch if this is a fresh start
 	if p.currentEpoch == 0 {
 		p.currentEpoch = uint32(welcome.CurrentEpoch)
+		p.metrics.SetCurrentEpoch(welcome.CurrentEpoch)
 	}
 
 	// Build subscription list from config
@@ -286,6 +298,13 @@ func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 
 	case bob.MessageTypePong:
 		p.logger.Debug("Received pong")
+		var pong bob.PongMessage
+		if err := json.Unmarshal(data, &pong); err == nil {
+			p.mu.RLock()
+			lastTick := p.lastTick
+			p.mu.RUnlock()
+			p.metrics.SetProcessingDelta(int64(pong.ServerTick) - int64(lastTick))
+		}
 
 	case bob.MessageTypeError:
 		var msg bob.ErrorMessage
@@ -295,6 +314,7 @@ func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 		p.logger.Error("Received error from bob",
 			zap.String("code", msg.Code),
 			zap.String("message", msg.Message))
+		p.metrics.IncProcessorBobErrors(msg.Code)
 
 	default:
 		p.logger.Debug("Received unknown message type", zap.String("type", base.Type))
@@ -318,13 +338,23 @@ func (p *Processor) flushBatch(ctx context.Context) error {
 	// Publish to Kafka before storage (at-least-once delivery)
 	if p.publisher != nil && len(batch.kafkaMsgs) > 0 {
 		if err := p.publisher.PublishEvents(ctx, batch.kafkaMsgs); err != nil {
+			for _, event := range batch.protoEvents {
+				p.metrics.IncProcessorEventsFailed(event.EventType, "kafka_error")
+			}
 			return fmt.Errorf("failed to publish batch to kafka: %w", err)
 		}
 	}
 
 	// Batch PebbleDB write
 	if err := p.storage.StoreEvents(batch.protoEvents); err != nil {
+		for _, event := range batch.protoEvents {
+			p.metrics.IncProcessorEventsFailed(event.EventType, "storage_error")
+		}
 		return fmt.Errorf("failed to store event batch: %w", err)
+	}
+
+	for _, event := range batch.protoEvents {
+		p.metrics.IncProcessorEventsProcessed(event.EventType)
 	}
 
 	// Update local state
@@ -333,6 +363,10 @@ func (p *Processor) flushBatch(ctx context.Context) error {
 	p.lastTick = batch.tick
 	p.eventsReceived += uint64(len(batch.protoEvents))
 	p.mu.Unlock()
+
+	p.metrics.SetLastProcessedTick(batch.tick)
+	p.metrics.SetLastProcessedLogID(batch.lastLogID)
+	p.metrics.SetCurrentTickEventCount(0)
 
 	p.logger.Debug("Flushed batch",
 		zap.Uint32("tick", batch.tick),
@@ -357,8 +391,11 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 
 	if !payload.OK {
 		p.logger.Debug("Skipping non-OK log message")
+		p.metrics.IncProcessorEventsSkippedNonOK()
 		return nil
 	}
+
+	p.metrics.IncProcessorEventsReceived(payload.Type)
 
 	// Check for epoch transition — flush before changing epoch
 	if uint32(payload.Epoch) != p.currentEpoch {
@@ -369,6 +406,7 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 			zap.Uint32("oldEpoch", p.currentEpoch),
 			zap.Uint16("newEpoch", payload.Epoch))
 		p.currentEpoch = uint32(payload.Epoch)
+		p.metrics.SetCurrentEpoch(payload.Epoch)
 	}
 
 	// Tick boundary — flush if tick changed
@@ -398,12 +436,14 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 			zap.Uint64("logID", payload.LogID),
 			zap.Uint32("tick", payload.Tick),
 			zap.Uint32("fromLogType", logMsg.LogType))
+		p.metrics.IncProcessorEventsDeduplicated(payload.Type)
 		return nil
 	}
 
 	// Validate and parse body into typed struct
 	parsed, err := bob.ParseEventBody(payload.Type, payload.Body)
 	if err != nil {
+		p.metrics.IncProcessorEventsFailed(payload.Type, "parse_error")
 		return fmt.Errorf("failed to parse event body for log type %d: %w", payload.Type, err)
 	}
 
@@ -462,6 +502,8 @@ func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
 	p.pendingBatch.lastLogID = payload.LogID
 
 	p.tickEventIndex++
+
+	p.metrics.SetCurrentTickEventCount(len(p.pendingBatch.protoEvents))
 
 	p.logger.Debug("Buffered event",
 		zap.Uint64("logID", payload.LogID),

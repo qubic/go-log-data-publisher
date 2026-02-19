@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -14,9 +15,14 @@ import (
 	"github.com/qubic/bob-events-bridge/internal/config"
 	"github.com/qubic/bob-events-bridge/internal/grpc"
 	"github.com/qubic/bob-events-bridge/internal/kafka"
+	"github.com/qubic/bob-events-bridge/internal/metrics"
 	"github.com/qubic/bob-events-bridge/internal/processor"
 	"github.com/qubic/bob-events-bridge/internal/storage"
 )
+
+func newTestMetrics() *metrics.BridgeMetrics {
+	return metrics.NewBridgeMetrics(prometheus.NewRegistry(), "test")
+}
 
 // startProcessor starts the processor in a goroutine and returns a channel that signals when it stops
 func startProcessor(ctx context.Context, proc *processor.Processor) <-chan struct{} {
@@ -53,7 +59,7 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 	// 3. Create processor
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	// 4. Start processor
 	ctx, cancel := context.WithCancel(context.Background())
@@ -109,7 +115,7 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -174,7 +180,7 @@ func TestE2E_EpochTransition(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -237,7 +243,7 @@ func TestE2E_Deduplication(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -293,7 +299,7 @@ func TestE2E_StatePersistence(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -341,7 +347,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 
 		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -373,7 +379,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil)
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)
@@ -406,7 +412,7 @@ func TestE2E_GetStatus(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -462,7 +468,7 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -520,7 +526,7 @@ func TestE2E_NonOKLogsSkipped(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -580,7 +586,7 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 		{SCIndex: 0, LogType: 1}, // asset_issuance
 		{SCIndex: 0, LogType: 2}, // asset_ownership_change
 	}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -643,7 +649,7 @@ func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -729,7 +735,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 
 		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil)
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -767,7 +773,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil)
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)
@@ -833,7 +839,7 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 	mockKafka := kafka.NewMockPublisher()
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -902,7 +908,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		{SCIndex: 0, LogType: 8},
 		{SCIndex: 0, LogType: 13},
 	}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -1026,7 +1032,7 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 
 	cfg := CreateTestConfig(mockBob, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -1098,7 +1104,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 		mockKafka := kafka.NewMockPublisher()
 		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -1145,7 +1151,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 	mockKafka2 := kafka.NewMockPublisher()
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2)
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)
@@ -1227,7 +1233,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		mockKafka := kafka.NewMockPublisher()
 		cfg := CreateTestConfig(mockBob, tempDir)
 		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka)
+		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -1266,7 +1272,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 	mockKafka2 := kafka.NewMockPublisher()
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
 	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2)
+	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)

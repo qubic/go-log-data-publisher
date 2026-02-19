@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/qubic/bob-events-bridge/internal/metrics"
 	kafkago "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/compress"
 	"go.uber.org/zap"
@@ -19,12 +20,13 @@ type Publisher interface {
 
 // Producer is the real Kafka publisher using segmentio/kafka-go.
 type Producer struct {
-	writer *kafkago.Writer
-	logger *zap.Logger
+	writer  *kafkago.Writer
+	logger  *zap.Logger
+	metrics *metrics.BridgeMetrics
 }
 
 // NewProducer creates a new Kafka producer.
-func NewProducer(brokers []string, topic string, logger *zap.Logger) *Producer {
+func NewProducer(brokers []string, topic string, logger *zap.Logger, metrics *metrics.BridgeMetrics) *Producer {
 	w := &kafkago.Writer{
 		Addr:                   kafkago.TCP(brokers...),
 		Topic:                  topic,
@@ -35,8 +37,9 @@ func NewProducer(brokers []string, topic string, logger *zap.Logger) *Producer {
 	}
 
 	return &Producer{
-		writer: w,
-		logger: logger,
+		writer:  w,
+		logger:  logger,
+		metrics: metrics,
 	}
 }
 
@@ -45,6 +48,7 @@ func NewProducer(brokers []string, topic string, logger *zap.Logger) *Producer {
 func (p *Producer) PublishEvent(ctx context.Context, msg *EventMessage) error {
 	value, err := json.Marshal(msg)
 	if err != nil {
+		p.metrics.IncKafkaPublishErrors("marshal_error")
 		return fmt.Errorf("failed to marshal event message: %w", err)
 	}
 
@@ -54,8 +58,11 @@ func (p *Producer) PublishEvent(ctx context.Context, msg *EventMessage) error {
 		Key:   key,
 		Value: value,
 	}); err != nil {
+		p.metrics.IncKafkaPublishErrors("publish_error")
 		return fmt.Errorf("failed to write message to kafka: %w", err)
 	}
+
+	p.metrics.IncKafkaMessagesPublished(msg.Type, p.writer.Topic)
 
 	p.logger.Debug("Published event to Kafka",
 		zap.Uint64("logId", msg.LogID),
@@ -75,6 +82,7 @@ func (p *Producer) PublishEvents(ctx context.Context, msgs []*EventMessage) erro
 	for _, msg := range msgs {
 		value, err := json.Marshal(msg)
 		if err != nil {
+			p.metrics.IncKafkaPublishErrors("marshal_error")
 			return fmt.Errorf("failed to marshal event message: %w", err)
 		}
 		key := []byte(fmt.Sprintf("%d", msg.TickNumber))
@@ -85,7 +93,12 @@ func (p *Producer) PublishEvents(ctx context.Context, msgs []*EventMessage) erro
 	}
 
 	if err := p.writer.WriteMessages(ctx, kafkaMsgs...); err != nil {
+		p.metrics.IncKafkaPublishErrors("publish_error")
 		return fmt.Errorf("failed to write messages to kafka: %w", err)
+	}
+
+	for _, msg := range msgs {
+		p.metrics.IncKafkaMessagesPublished(msg.Type, p.writer.Topic)
 	}
 
 	p.logger.Debug("Published batch to Kafka",
