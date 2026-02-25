@@ -2,38 +2,68 @@ package bob
 
 import "encoding/json"
 
-// Message types from bob WebSocket
-const (
-	MessageTypeWelcome         = "welcome"
-	MessageTypeLog             = "log"
-	MessageTypeCatchUpComplete = "catchUpComplete"
-	MessageTypeAck             = "ack"
-	MessageTypePong            = "pong"
-	MessageTypeError           = "error"
-)
-
-// BaseMessage is used to determine the message type
-type BaseMessage struct {
-	Type string `json:"type"`
+// JSON-RPC 2.0 request for subscribing
+type JsonRpcRequest struct {
+	JsonRpc string      `json:"jsonrpc"`
+	ID      int         `json:"id"`
+	Method  string      `json:"method"`
+	Params  interface{} `json:"params"`
 }
 
-// WelcomeMessage is sent by the server on connection
-type WelcomeMessage struct {
-	Type                string `json:"type"`
-	CurrentVerifiedTick uint32 `json:"currentVerifiedTick"`
-	CurrentEpoch        uint16 `json:"currentEpoch"`
+// JSON-RPC 2.0 response (for subscription ID)
+type JsonRpcResponse struct {
+	JsonRpc string          `json:"jsonrpc"`
+	ID      int             `json:"id,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *JsonRpcError   `json:"error,omitempty"`
 }
 
-// LogMessage contains a log event from the server
-type LogMessage struct {
-	Type      string          `json:"type"`
-	SCIndex   uint32          `json:"scIndex"`
-	LogType   uint32          `json:"logType"`
-	IsCatchUp bool            `json:"isCatchUp"`
-	Message   json.RawMessage `json:"message"` // Preserve raw JSON for storage
+// JsonRpcError represents a JSON-RPC 2.0 error
+type JsonRpcError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
-// LogPayload is the parsed content of LogMessage.Message
+// JSON-RPC 2.0 notification (subscription events)
+type JsonRpcNotification struct {
+	JsonRpc string             `json:"jsonrpc"`
+	Method  string             `json:"method"`
+	Params  SubscriptionParams `json:"params"`
+}
+
+// SubscriptionParams wraps the subscription ID and result payload
+type SubscriptionParams struct {
+	Subscription string          `json:"subscription"`
+	Result       json.RawMessage `json:"result"`
+}
+
+// TickStreamResult is the payload for a tickStream notification
+type TickStreamResult struct {
+	Epoch           uint16       `json:"epoch"`
+	Tick            uint32       `json:"tick"`
+	IsCatchUp       bool         `json:"isCatchUp"`
+	IsSkipped       bool         `json:"isSkipped"`
+	TotalLogs       int          `json:"totalLogs"`
+	FilteredLogs    int          `json:"filteredLogs"`
+	Logs            []LogPayload `json:"logs"`
+	CatchUpComplete bool         `json:"catchUpComplete,omitempty"`
+}
+
+// LogFilter for tickStream subscription
+type LogFilter struct {
+	SCIndex uint32 `json:"scIndex"`
+	LogType uint32 `json:"logType"`
+}
+
+// TickStreamSubscribeParams for qubic_subscribe
+type TickStreamSubscribeParams struct {
+	LogFilters     []LogFilter `json:"logFilters,omitempty"`
+	ExcludeTxs     bool        `json:"excludeTxs"`
+	SkipEmptyTicks bool        `json:"skipEmptyTicks"`
+	StartTick      uint32      `json:"startTick,omitempty"`
+}
+
+// LogPayload is the parsed content of an individual log event
 type LogPayload struct {
 	OK          bool            `json:"ok"`
 	Epoch       uint16          `json:"epoch"`
@@ -46,61 +76,6 @@ type LogPayload struct {
 	Timestamp   uint64          `json:"timestamp,omitempty"`
 	TxHash      string          `json:"txHash,omitempty"`
 	Body        json.RawMessage `json:"body,omitempty"`
-}
-
-// CatchUpCompleteMessage indicates catch-up has finished
-type CatchUpCompleteMessage struct {
-	Type          string `json:"type"`
-	FromLogID     int64  `json:"fromLogId,omitempty"`
-	ToLogID       int64  `json:"toLogId,omitempty"`
-	FromTick      uint32 `json:"fromTick,omitempty"`
-	ToTick        uint32 `json:"toTick,omitempty"`
-	LogsDelivered int    `json:"logsDelivered"`
-}
-
-// AckMessage is the server's response to subscribe/unsubscribe
-type AckMessage struct {
-	Type               string `json:"type"`
-	Action             string `json:"action"`
-	Success            bool   `json:"success"`
-	SubscriptionsAdded int    `json:"subscriptionsAdded,omitempty"`
-	SCIndex            uint32 `json:"scIndex,omitempty"`
-	LogType            uint32 `json:"logType,omitempty"`
-}
-
-// PongMessage is the response to a ping
-type PongMessage struct {
-	Type        string `json:"type"`
-	ServerTick  uint32 `json:"serverTick"`
-	ServerEpoch uint16 `json:"serverEpoch"`
-}
-
-// ErrorMessage indicates an error from the server
-type ErrorMessage struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-	Code    string `json:"code"`
-}
-
-// SubscribeRequest is sent to subscribe to log types
-type SubscribeRequest struct {
-	Action        string              `json:"action"`
-	Subscriptions []SubscriptionEntry `json:"subscriptions,omitempty"`
-	SCIndex       *uint32             `json:"scIndex,omitempty"`
-	LogType       *uint32             `json:"logType,omitempty"`
-	LastLogID     *int64              `json:"lastLogId,omitempty"`
-	LastTick      *uint32             `json:"lastTick,omitempty"`
-}
-
-// SubscriptionEntry represents a single subscription in a batch
-type SubscriptionEntry struct {
-	SCIndex uint32 `json:"scIndex"`
-	LogType uint32 `json:"logType"`
-}
-
-// PingRequest is sent to check connectivity
-type PingRequest struct {
-	Action string `json:"action"`
 }
 
 // StatusResponse represents the /status endpoint response

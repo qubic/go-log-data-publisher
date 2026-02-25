@@ -3,7 +3,7 @@ name: Deploy bob-events-bridge prod images to GHCR
 on:
   push:
     branches:
-      - 1-publish-log-events-to-kafka
+      - 17-bridge-address-bob-wslogs-removed-endpoint
     paths:
       - 'bob-events-bridge/**'
 

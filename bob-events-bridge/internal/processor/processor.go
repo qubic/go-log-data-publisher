@@ -28,13 +28,12 @@ type tickBatch struct {
 
 // Processor handles connecting to bob and processing events
 type Processor struct {
-	cfg           *config.Config
-	subscriptions []config.SubscriptionEntry
-	storage       *storage.Manager
-	logger        *zap.Logger
-	client        *bob.WSClient
-	publisher     kafka.Publisher // nil if Kafka disabled
-	metrics       *metrics.BridgeMetrics
+	cfg       *config.Config
+	storage   *storage.Manager
+	logger    *zap.Logger
+	client    *bob.WSClient
+	publisher kafka.Publisher // nil if Kafka disabled
+	metrics   *metrics.BridgeMetrics
 
 	mu             sync.RWMutex
 	running        bool
@@ -49,14 +48,13 @@ type Processor struct {
 }
 
 // NewProcessor creates a new event processor
-func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher, metrics *metrics.BridgeMetrics) *Processor {
+func NewProcessor(cfg *config.Config, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher, metrics *metrics.BridgeMetrics) *Processor {
 	return &Processor{
-		cfg:           cfg,
-		subscriptions: subscriptions,
-		storage:       storage,
-		logger:        logger,
-		publisher:     publisher,
-		metrics:       metrics,
+		cfg:       cfg,
+		storage:   storage,
+		logger:    logger,
+		publisher: publisher,
+		metrics:   metrics,
 	}
 }
 
@@ -162,68 +160,46 @@ func (p *Processor) connectAndProcess(ctx context.Context) error {
 	// Create WebSocket client
 	p.client = bob.NewWSClient(p.cfg.Bob.WebSocketURL, p.logger)
 
-	// Connect to bob
-	welcome, err := p.client.Connect(ctx)
-	if err != nil {
+	// Connect to bob (no welcome message in /ws/qubic)
+	if err := p.client.Connect(); err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
 
-	p.logger.Info("Connected to bob",
-		zap.Uint32("currentVerifiedTick", welcome.CurrentVerifiedTick),
-		zap.Uint16("currentEpoch", welcome.CurrentEpoch))
+	// Fetch current epoch from HTTP status endpoint
+	status, err := bob.FetchStatus(ctx, p.cfg.Bob.StatusURL)
+	if err != nil {
+		_ = p.client.Close()
+		return fmt.Errorf("failed to fetch bob status: %w", err)
+	}
+
+	p.logger.Info("Fetched bob status",
+		zap.Uint16("currentEpoch", status.CurrentProcessingEpoch),
+		zap.Uint32("currentTick", status.CurrentFetchingTick))
 
 	// Update current epoch if this is a fresh start
 	if p.currentEpoch == 0 {
-		p.currentEpoch = uint32(welcome.CurrentEpoch)
-		p.metrics.SetCurrentEpoch(welcome.CurrentEpoch)
+		p.currentEpoch = uint32(status.CurrentProcessingEpoch)
+		p.metrics.SetCurrentEpoch(status.CurrentProcessingEpoch)
 	}
 
-	// Build subscription list from config
-	subscriptions := make([]bob.SubscriptionEntry, len(p.subscriptions))
-	for i, sub := range p.subscriptions {
-		subscriptions[i] = bob.SubscriptionEntry{
-			SCIndex: sub.SCIndex,
-			LogType: sub.LogType,
-		}
+	// Subscribe with startTick for crash recovery
+	startTick := p.lastTick
+	if startTick > 0 {
+		startTick++ // tickStream startTick is inclusive, we want the next tick
 	}
 
-	// Subscribe with lastTick for crash recovery (tick-based resumption only)
-	var lastTickPtr *uint32
-	if p.lastTick > 0 {
-		lastTickPtr = &p.lastTick
-	}
-
-	if err := p.client.Subscribe(subscriptions, lastTickPtr); err != nil {
+	subscriptionID, err := p.client.Subscribe(startTick)
+	if err != nil {
 		_ = p.client.Close()
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 
-	// Start ping goroutine
-	pingCtx, pingCancel := context.WithCancel(ctx)
-	defer pingCancel()
-	go p.pingLoop(pingCtx)
+	p.logger.Info("Subscribed to tickStream",
+		zap.String("subscriptionID", subscriptionID),
+		zap.Uint32("startTick", startTick))
 
-	// Process messages
+	// Process messages (no ping goroutine needed — WebSocket protocol handles keepalive)
 	return p.processMessages(ctx)
-}
-
-// pingLoop sends periodic pings to keep the connection alive
-func (p *Processor) pingLoop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if p.client != nil && p.client.IsConnected() {
-				if err := p.client.SendPing(); err != nil {
-					p.logger.Warn("Failed to send ping", zap.Error(err))
-				}
-			}
-		}
-	}
 }
 
 // processMessages reads and processes messages from the WebSocket
@@ -254,70 +230,177 @@ func (p *Processor) processMessages(ctx context.Context) error {
 	}
 }
 
-// handleMessage processes a single message from bob
+// handleMessage processes a single JSON-RPC message from bob
 func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
-	var base bob.BaseMessage
-	if err := json.Unmarshal(data, &base); err != nil {
-		return fmt.Errorf("failed to parse base message: %w", err)
+	// Try parsing as a JSON-RPC notification (subscription events)
+	var notification bob.JsonRpcNotification
+	if err := json.Unmarshal(data, &notification); err != nil {
+		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
-	// Debug: log all message types for troubleshooting
-	if base.Type != bob.MessageTypeLog && base.Type != bob.MessageTypePong {
-		p.logger.Debug("Received message", zap.String("type", base.Type), zap.ByteString("raw", data))
+	// Handle subscription notifications
+	if notification.Method == "qubic_subscription" {
+		var result bob.TickStreamResult
+		if err := json.Unmarshal(notification.Params.Result, &result); err != nil {
+			return fmt.Errorf("failed to parse tickStream result: %w", err)
+		}
+
+		// CatchUpComplete signal
+		if result.CatchUpComplete {
+			if err := p.flushBatch(ctx); err != nil {
+				return fmt.Errorf("failed to flush batch on catch-up complete: %w", err)
+			}
+			p.logger.Info("Catch-up complete")
+			return nil
+		}
+
+		return p.handleTickStreamResult(ctx, &result)
 	}
 
-	switch base.Type {
-	case bob.MessageTypeLog:
-		return p.handleLogMessage(ctx, data)
+	// Try parsing as a JSON-RPC error response
+	var resp bob.JsonRpcResponse
+	if err := json.Unmarshal(data, &resp); err == nil && resp.Error != nil {
+		p.logger.Error("Received JSON-RPC error from bob",
+			zap.Int("code", resp.Error.Code),
+			zap.String("message", resp.Error.Message))
+		p.metrics.IncProcessorBobErrors(fmt.Sprintf("jsonrpc_%d", resp.Error.Code))
+		return nil
+	}
 
-	case bob.MessageTypeCatchUpComplete:
+	p.logger.Debug("Received unknown message", zap.ByteString("raw", data))
+	return nil
+}
+
+// handleTickStreamResult processes a single tickStream result containing all logs for a tick
+func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.TickStreamResult) error {
+	// Check for epoch transition — flush before changing epoch
+	if uint32(result.Epoch) != p.currentEpoch && p.currentEpoch != 0 {
 		if err := p.flushBatch(ctx); err != nil {
-			return fmt.Errorf("failed to flush batch on catch-up complete: %w", err)
+			return fmt.Errorf("failed to flush batch on epoch transition: %w", err)
+		}
+		p.logger.Info("Epoch transition detected",
+			zap.Uint32("oldEpoch", p.currentEpoch),
+			zap.Uint16("newEpoch", result.Epoch))
+		p.currentEpoch = uint32(result.Epoch)
+		p.metrics.SetCurrentEpoch(result.Epoch)
+	}
+
+	// Update epoch on first result if not set
+	if p.currentEpoch == 0 {
+		p.currentEpoch = uint32(result.Epoch)
+		p.metrics.SetCurrentEpoch(result.Epoch)
+	}
+
+	// Tick boundary — flush if tick changed from pending batch
+	if p.pendingBatch != nil && result.Tick != p.pendingBatch.tick {
+		if err := p.flushBatch(ctx); err != nil {
+			return fmt.Errorf("failed to flush batch on tick change: %w", err)
+		}
+		p.tickEventIndex = 0
+		p.tickForIndex = result.Tick
+	}
+
+	// Reset index if processing a different tick than what tickEventIndex was recovered/set for.
+	if p.tickForIndex != 0 && p.tickForIndex != result.Tick {
+		p.tickEventIndex = 0
+		p.tickForIndex = result.Tick
+	}
+
+	// Process each log in the tick
+	for _, payload := range result.Logs {
+		if !payload.OK {
+			p.logger.Debug("Skipping non-OK log message")
+			p.metrics.IncProcessorEventsSkippedNonOK()
+			continue
 		}
 
-		var msg bob.CatchUpCompleteMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return fmt.Errorf("failed to parse catchup message: %w", err)
-		}
-		p.logger.Info("Catch-up complete",
-			zap.Int("logsDelivered", msg.LogsDelivered),
-			zap.Int64("fromLogID", msg.FromLogID),
-			zap.Int64("toLogID", msg.ToLogID))
+		p.metrics.IncProcessorEventsReceived(payload.Type)
 
-	case bob.MessageTypeAck:
-		var msg bob.AckMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return fmt.Errorf("failed to parse ack message: %w", err)
-		}
-		p.logger.Debug("Received ack",
-			zap.String("action", msg.Action),
-			zap.Bool("success", msg.Success),
-			zap.Uint32("scIndex", msg.SCIndex),
-			zap.Uint32("logType", msg.LogType),
-			zap.Int("subscriptionsAdded", msg.SubscriptionsAdded))
-
-	case bob.MessageTypePong:
-		p.logger.Debug("Received pong")
-		var pong bob.PongMessage
-		if err := json.Unmarshal(data, &pong); err == nil {
-			p.mu.RLock()
-			lastTick := p.lastTick
-			p.mu.RUnlock()
-			p.metrics.SetProcessingDelta(int64(pong.ServerTick) - int64(lastTick))
+		// Deduplication check: skip if we already have this event
+		exists, err := p.storage.HasEvent(p.currentEpoch, payload.Tick, payload.LogID)
+		if err != nil {
+			p.logger.Warn("Failed to check for duplicate event", zap.Error(err))
+		} else if exists {
+			p.logger.Debug("Skipping duplicate event",
+				zap.Uint64("logID", payload.LogID),
+				zap.Uint32("tick", payload.Tick),
+				zap.Uint32("type", payload.Type))
+			p.metrics.IncProcessorEventsDeduplicated(payload.Type)
+			continue
 		}
 
-	case bob.MessageTypeError:
-		var msg bob.ErrorMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return fmt.Errorf("failed to parse error message: %w", err)
+		// Validate and parse body into typed struct
+		parsed, err := bob.ParseEventBody(payload.Type, payload.Body)
+		if err != nil {
+			p.metrics.IncProcessorEventsFailed(payload.Type, "parse_error")
+			return fmt.Errorf("failed to parse event body for log type %d: %w", payload.Type, err)
 		}
-		p.logger.Error("Received error from bob",
-			zap.String("code", msg.Code),
-			zap.String("message", msg.Message))
-		p.metrics.IncProcessorBobErrors(msg.Code)
 
-	default:
-		p.logger.Debug("Received unknown message type", zap.String("type", base.Type))
+		// Convert typed struct to protobuf Struct
+		var bodyStruct *structpb.Struct
+		if parsed != nil {
+			bodyMap, err := bob.EventBodyToMap(parsed)
+			if err != nil {
+				return fmt.Errorf("failed to convert event body to map: %w", err)
+			}
+			bodyStruct, err = structpb.NewStruct(bodyMap)
+			if err != nil {
+				return fmt.Errorf("failed to convert body to protobuf Struct: %w", err)
+			}
+		}
+
+		// Build kafka message (if publisher configured)
+		var kafkaMsg *kafka.EventMessage
+		if p.publisher != nil {
+			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex)
+			if err != nil {
+				return fmt.Errorf("failed to build kafka message: %w", err)
+			}
+		}
+
+		// Create event proto
+		event := &eventsbridge.Event{
+			LogId:       payload.LogID,
+			Tick:        payload.Tick,
+			Epoch:       uint32(payload.Epoch),
+			EventType:   payload.Type,
+			TxHash:      payload.TxHash,
+			Timestamp:   payload.Timestamp,
+			Body:        bodyStruct,
+			IndexInTick: p.tickEventIndex,
+			LogDigest:   payload.LogDigest,
+		}
+
+		// Initialize batch if nil
+		if p.pendingBatch == nil {
+			p.pendingBatch = &tickBatch{
+				tick:  payload.Tick,
+				epoch: uint32(payload.Epoch),
+			}
+			if p.tickForIndex == 0 {
+				p.tickForIndex = payload.Tick
+			}
+		}
+
+		// Add to batch
+		if kafkaMsg != nil {
+			p.pendingBatch.kafkaMsgs = append(p.pendingBatch.kafkaMsgs, kafkaMsg)
+		}
+		p.pendingBatch.protoEvents = append(p.pendingBatch.protoEvents, event)
+		p.pendingBatch.lastLogID = payload.LogID
+
+		p.tickEventIndex++
+
+		p.metrics.SetCurrentTickEventCount(len(p.pendingBatch.protoEvents))
+
+		p.logger.Debug("Buffered event",
+			zap.Uint64("logID", payload.LogID),
+			zap.Uint32("tick", payload.Tick),
+			zap.Uint16("epoch", payload.Epoch),
+			zap.Uint32("type", payload.Type),
+			zap.Bool("isCatchUp", result.IsCatchUp),
+			zap.Bool("kafkaEnabled", p.publisher != nil),
+			zap.Int("batchSize", len(p.pendingBatch.protoEvents)))
 	}
 
 	return nil
@@ -372,149 +455,6 @@ func (p *Processor) flushBatch(ctx context.Context) error {
 		zap.Uint32("tick", batch.tick),
 		zap.Uint32("epoch", batch.epoch),
 		zap.Int("events", len(batch.protoEvents)))
-
-	return nil
-}
-
-// handleLogMessage processes a log event
-func (p *Processor) handleLogMessage(ctx context.Context, data []byte) error {
-	var logMsg bob.LogMessage
-	if err := json.Unmarshal(data, &logMsg); err != nil {
-		return fmt.Errorf("failed to parse log message: %w", err)
-	}
-
-	// Parse the payload
-	var payload bob.LogPayload
-	if err := json.Unmarshal(logMsg.Message, &payload); err != nil {
-		return fmt.Errorf("failed to parse log payload: %w", err)
-	}
-
-	if !payload.OK {
-		p.logger.Debug("Skipping non-OK log message")
-		p.metrics.IncProcessorEventsSkippedNonOK()
-		return nil
-	}
-
-	p.metrics.IncProcessorEventsReceived(payload.Type)
-
-	// Check for epoch transition — flush before changing epoch
-	if uint32(payload.Epoch) != p.currentEpoch {
-		if err := p.flushBatch(ctx); err != nil {
-			return fmt.Errorf("failed to flush batch on epoch transition: %w", err)
-		}
-		p.logger.Info("Epoch transition detected",
-			zap.Uint32("oldEpoch", p.currentEpoch),
-			zap.Uint16("newEpoch", payload.Epoch))
-		p.currentEpoch = uint32(payload.Epoch)
-		p.metrics.SetCurrentEpoch(payload.Epoch)
-	}
-
-	// Tick boundary — flush if tick changed
-	if p.pendingBatch != nil && payload.Tick != p.pendingBatch.tick {
-		if err := p.flushBatch(ctx); err != nil {
-			return fmt.Errorf("failed to flush batch on tick change: %w", err)
-		}
-		p.tickEventIndex = 0
-		p.tickForIndex = payload.Tick
-	}
-
-	// Reset index if processing a different tick than what tickEventIndex was recovered/set for.
-	// This handles the case where pendingBatch is nil (e.g., all events for the previous tick
-	// were deduplicated) but we're now processing a new tick.
-	if p.tickForIndex != 0 && p.tickForIndex != payload.Tick {
-		p.tickEventIndex = 0
-		p.tickForIndex = payload.Tick
-	}
-
-	// Deduplication check: skip if we already have this event
-	exists, err := p.storage.HasEvent(p.currentEpoch, payload.Tick, payload.LogID)
-	if err != nil {
-		p.logger.Warn("Failed to check for duplicate event", zap.Error(err))
-		// Continue processing - better to risk a duplicate than to skip
-	} else if exists {
-		p.logger.Debug("Skipping duplicate event",
-			zap.Uint64("logID", payload.LogID),
-			zap.Uint32("tick", payload.Tick),
-			zap.Uint32("fromLogType", logMsg.LogType))
-		p.metrics.IncProcessorEventsDeduplicated(payload.Type)
-		return nil
-	}
-
-	// Validate and parse body into typed struct
-	parsed, err := bob.ParseEventBody(payload.Type, payload.Body)
-	if err != nil {
-		p.metrics.IncProcessorEventsFailed(payload.Type, "parse_error")
-		return fmt.Errorf("failed to parse event body for log type %d: %w", payload.Type, err)
-	}
-
-	// Convert typed struct to protobuf Struct
-	var bodyStruct *structpb.Struct
-	if parsed != nil {
-		bodyMap, err := bob.EventBodyToMap(parsed)
-		if err != nil {
-			return fmt.Errorf("failed to convert event body to map: %w", err)
-		}
-		bodyStruct, err = structpb.NewStruct(bodyMap)
-		if err != nil {
-			return fmt.Errorf("failed to convert body to protobuf Struct: %w", err)
-		}
-	}
-
-	// Build kafka message (if publisher configured)
-	var kafkaMsg *kafka.EventMessage
-	if p.publisher != nil {
-		kafkaMsg, err = kafka.BuildEventMessage(&logMsg, &payload, parsed, p.tickEventIndex)
-		if err != nil {
-			return fmt.Errorf("failed to build kafka message: %w", err)
-		}
-	}
-
-	// Create event proto
-	event := &eventsbridge.Event{
-		LogId:       payload.LogID,
-		Tick:        payload.Tick,
-		Epoch:       uint32(payload.Epoch),
-		EventType:   payload.Type,
-		TxHash:      payload.TxHash,
-		Timestamp:   payload.Timestamp,
-		Body:        bodyStruct,
-		IndexInTick: p.tickEventIndex,
-		LogDigest:   payload.LogDigest,
-	}
-
-	// Initialize batch if nil
-	if p.pendingBatch == nil {
-		p.pendingBatch = &tickBatch{
-			tick:  payload.Tick,
-			epoch: uint32(payload.Epoch),
-		}
-		// Track which tick the index is for
-		if p.tickForIndex == 0 {
-			p.tickForIndex = payload.Tick
-		}
-	}
-
-	// Add to batch
-	if kafkaMsg != nil {
-		p.pendingBatch.kafkaMsgs = append(p.pendingBatch.kafkaMsgs, kafkaMsg)
-	}
-	p.pendingBatch.protoEvents = append(p.pendingBatch.protoEvents, event)
-	p.pendingBatch.lastLogID = payload.LogID
-
-	p.tickEventIndex++
-
-	p.metrics.SetCurrentTickEventCount(len(p.pendingBatch.protoEvents))
-
-	p.logger.Debug("Buffered event",
-		zap.Uint64("logID", payload.LogID),
-		zap.Uint32("tick", payload.Tick),
-		zap.Uint16("epoch", payload.Epoch),
-		zap.Uint32("type", payload.Type),
-		zap.Uint32("scIndex", logMsg.SCIndex),
-		zap.Uint32("logType", logMsg.LogType),
-		zap.Bool("isCatchUp", logMsg.IsCatchUp),
-		zap.Bool("kafkaEnabled", p.publisher != nil),
-		zap.Int("batchSize", len(p.pendingBatch.protoEvents)))
 
 	return nil
 }

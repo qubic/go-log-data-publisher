@@ -67,13 +67,6 @@ func main() {
 
 	bridgeMetrics := metrics.NewBridgeMetrics(promReg, cfg.Metrics.Namespace)
 
-	// Parse subscriptions
-	subscriptions, err := cfg.GetSubscriptions()
-	if err != nil {
-		logger.Fatal("Failed to parse subscriptions", zap.Error(err))
-	}
-	logger.Info("Subscriptions configured", zap.Int("count", len(subscriptions)))
-
 	// Initialize storage manager
 	storageMgr, err := storage.NewManager(cfg.Storage.BasePath, logger)
 	if err != nil {
@@ -110,7 +103,7 @@ func main() {
 	}
 
 	// Create processor
-	proc := processor.NewProcessor(cfg, subscriptions, storageMgr, logger, kafkaPublisher, bridgeMetrics)
+	proc := processor.NewProcessor(cfg, storageMgr, logger, kafkaPublisher, bridgeMetrics)
 
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())

@@ -12,7 +12,7 @@ import (
 	"github.com/qubic/bob-events-bridge/internal/bob"
 )
 
-// MockBobServer simulates bob's WebSocket protocol for testing
+// MockBobServer simulates bob's /ws/qubic WebSocket protocol for testing
 type MockBobServer struct {
 	server              *httptest.Server
 	currentEpoch        uint16
@@ -20,11 +20,12 @@ type MockBobServer struct {
 	initialTick         uint32
 	upgrader            websocket.Upgrader
 
-	mu             sync.Mutex
-	conn           *websocket.Conn
-	subscriptionCh chan bob.SubscribeRequest // Receives subscriptions from client
-	messagesToSend chan []byte               // Queue of messages to send to client
-	closed         bool
+	mu                         sync.Mutex
+	conn                       *websocket.Conn
+	subscriptionCh             chan bob.TickStreamSubscribeParams // Receives subscribe params from client
+	messagesToSend             chan []byte                        // Queue of messages to send to client
+	closed                     bool
+	preResponseNotifications   []bob.TickStreamResult // notifications to send before subscribe response
 }
 
 // NewMockBobServer creates a new mock bob server
@@ -33,7 +34,7 @@ func NewMockBobServer(epoch uint16, verifiedTick uint32) *MockBobServer {
 		currentEpoch:        epoch,
 		currentVerifiedTick: verifiedTick,
 		initialTick:         verifiedTick, // Default initialTick to verifiedTick
-		subscriptionCh:      make(chan bob.SubscribeRequest, 10),
+		subscriptionCh:      make(chan bob.TickStreamSubscribeParams, 10),
 		messagesToSend:      make(chan []byte, 100),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
@@ -41,7 +42,7 @@ func NewMockBobServer(epoch uint16, verifiedTick uint32) *MockBobServer {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws/logs", m.handleWS)
+	mux.HandleFunc("/ws/qubic", m.handleWS)
 	mux.HandleFunc("/status", m.handleStatus)
 	m.server = httptest.NewServer(mux)
 	return m
@@ -49,7 +50,7 @@ func NewMockBobServer(epoch uint16, verifiedTick uint32) *MockBobServer {
 
 // URL returns the WebSocket URL of the mock server
 func (m *MockBobServer) URL() string {
-	return "ws" + strings.TrimPrefix(m.server.URL, "http") + "/ws/logs"
+	return "ws" + strings.TrimPrefix(m.server.URL, "http") + "/ws/qubic"
 }
 
 // StatusURL returns the HTTP status URL of the mock server
@@ -96,24 +97,14 @@ func (m *MockBobServer) handleWS(w http.ResponseWriter, r *http.Request) {
 	m.conn = conn
 	m.mu.Unlock()
 
-	// Send welcome message
-	welcome := bob.WelcomeMessage{
-		Type:                bob.MessageTypeWelcome,
-		CurrentVerifiedTick: m.currentVerifiedTick,
-		CurrentEpoch:        m.currentEpoch,
-	}
-	if err := conn.WriteJSON(welcome); err != nil {
-		return
-	}
-
-	// Start read loop in goroutine
+	// No welcome message in /ws/qubic — start read loop directly
 	go m.readLoop(conn)
 
 	// Write loop - send queued messages
 	m.writeLoop(conn)
 }
 
-// readLoop reads messages from the client and handles them
+// readLoop reads messages from the client and handles JSON-RPC requests
 func (m *MockBobServer) readLoop(conn *websocket.Conn) {
 	for {
 		_, data, err := conn.ReadMessage()
@@ -121,58 +112,107 @@ func (m *MockBobServer) readLoop(conn *websocket.Conn) {
 			return
 		}
 
-		// Parse the message to determine type
-		var base struct {
-			Action string `json:"action"`
-		}
-		if err := json.Unmarshal(data, &base); err != nil {
+		// Parse as JSON-RPC request
+		var req bob.JsonRpcRequest
+		if err := json.Unmarshal(data, &req); err != nil {
 			continue
 		}
 
-		switch base.Action {
-		case "subscribe":
-			var req bob.SubscribeRequest
-			if err := json.Unmarshal(data, &req); err == nil {
-				// Send ack
-				ack := bob.AckMessage{
-					Type:               bob.MessageTypeAck,
-					Action:             "subscribe",
-					Success:            true,
-					SubscriptionsAdded: 1,
-				}
-				if req.SCIndex != nil {
-					ack.SCIndex = *req.SCIndex
-				}
-				if req.LogType != nil {
-					ack.LogType = *req.LogType
-				}
-
-				m.mu.Lock()
-				if m.conn != nil {
-					_ = m.conn.WriteJSON(ack)
-				}
-				m.mu.Unlock()
-
-				// Notify test
-				select {
-				case m.subscriptionCh <- req:
-				default:
-				}
-			}
-
-		case "ping":
-			pong := bob.PongMessage{
-				Type:        bob.MessageTypePong,
-				ServerTick:  m.currentVerifiedTick,
-				ServerEpoch: m.currentEpoch,
-			}
-			m.mu.Lock()
-			if m.conn != nil {
-				_ = m.conn.WriteJSON(pong)
-			}
-			m.mu.Unlock()
+		switch req.Method {
+		case "qubic_subscribe":
+			m.handleSubscribe(conn, req, data)
 		}
 	}
+}
+
+// handleSubscribe handles a qubic_subscribe JSON-RPC request
+func (m *MockBobServer) handleSubscribe(conn *websocket.Conn, req bob.JsonRpcRequest, rawData []byte) {
+	// Parse params: ["tickStream", {logFilters, excludeTxs, ...}]
+	var rawParams []json.RawMessage
+	paramsBytes, _ := json.Marshal(req.Params)
+	if err := json.Unmarshal(paramsBytes, &rawParams); err != nil || len(rawParams) < 2 {
+		// Send error response
+		m.sendJsonRpcError(conn, req.ID, -32602, "invalid params")
+		return
+	}
+
+	var subscribeParams bob.TickStreamSubscribeParams
+	if err := json.Unmarshal(rawParams[1], &subscribeParams); err != nil {
+		m.sendJsonRpcError(conn, req.ID, -32602, "invalid subscribe params")
+		return
+	}
+
+	// Use a deterministic subscription ID for testing
+	subID := "test-subscription-id"
+
+	// Send pre-response notifications if configured (simulates bob's catch-up race)
+	m.mu.Lock()
+	preNotifs := m.preResponseNotifications
+	m.preResponseNotifications = nil // consume them
+	m.mu.Unlock()
+
+	for _, result := range preNotifs {
+		resultJSON, _ := json.Marshal(result)
+		notification := bob.JsonRpcNotification{
+			JsonRpc: "2.0",
+			Method:  "qubic_subscription",
+			Params: bob.SubscriptionParams{
+				Subscription: subID,
+				Result:       resultJSON,
+			},
+		}
+		m.mu.Lock()
+		if m.conn != nil {
+			_ = m.conn.WriteJSON(notification)
+		}
+		m.mu.Unlock()
+	}
+
+	// Send JSON-RPC response with subscription ID
+	resp := bob.JsonRpcResponse{
+		JsonRpc: "2.0",
+		ID:      req.ID,
+	}
+	resultBytes, _ := json.Marshal(subID)
+	resp.Result = resultBytes
+
+	m.mu.Lock()
+	if m.conn != nil {
+		_ = m.conn.WriteJSON(resp)
+	}
+	m.mu.Unlock()
+
+	// Notify test of subscription
+	select {
+	case m.subscriptionCh <- subscribeParams:
+	default:
+	}
+}
+
+// SetSendNotificationsBeforeResponse queues notifications to be sent before the
+// next subscribe response. This simulates bob's behavior of starting tickStream
+// catch-up before sending the JSON-RPC response.
+func (m *MockBobServer) SetSendNotificationsBeforeResponse(notifications []bob.TickStreamResult) {
+	m.mu.Lock()
+	m.preResponseNotifications = notifications
+	m.mu.Unlock()
+}
+
+// sendJsonRpcError sends a JSON-RPC error response
+func (m *MockBobServer) sendJsonRpcError(conn *websocket.Conn, id int, code int, message string) {
+	resp := bob.JsonRpcResponse{
+		JsonRpc: "2.0",
+		ID:      id,
+		Error: &bob.JsonRpcError{
+			Code:    code,
+			Message: message,
+		},
+	}
+	m.mu.Lock()
+	if m.conn != nil {
+		_ = m.conn.WriteJSON(resp)
+	}
+	m.mu.Unlock()
 }
 
 // writeLoop sends queued messages to the client
@@ -200,22 +240,24 @@ func (m *MockBobServer) writeLoop(conn *websocket.Conn) {
 	}
 }
 
-// SendLogMessage queues a log message to be sent to the client
-func (m *MockBobServer) SendLogMessage(payload bob.LogPayload, scIndex, logType uint32, isCatchUp bool) error {
-	payloadJSON, err := json.Marshal(payload)
+// SendTickStreamResult sends a tickStream notification containing logs for a tick.
+// This replaces the old SendLogMessage — all logs for a tick are sent in one message.
+func (m *MockBobServer) SendTickStreamResult(result bob.TickStreamResult) error {
+	resultJSON, err := json.Marshal(result)
 	if err != nil {
 		return err
 	}
 
-	logMsg := bob.LogMessage{
-		Type:      bob.MessageTypeLog,
-		SCIndex:   scIndex,
-		LogType:   logType,
-		IsCatchUp: isCatchUp,
-		Message:   payloadJSON,
+	notification := bob.JsonRpcNotification{
+		JsonRpc: "2.0",
+		Method:  "qubic_subscription",
+		Params: bob.SubscriptionParams{
+			Subscription: "test-subscription-id",
+			Result:       resultJSON,
+		},
 	}
 
-	data, err := json.Marshal(logMsg)
+	data, err := json.Marshal(notification)
 	if err != nil {
 		return err
 	}
@@ -224,26 +266,21 @@ func (m *MockBobServer) SendLogMessage(payload bob.LogPayload, scIndex, logType 
 	return nil
 }
 
-// SendCatchUpComplete queues a catchUpComplete message
-func (m *MockBobServer) SendCatchUpComplete(fromLogID, toLogID int64, logsDelivered int) {
-	msg := bob.CatchUpCompleteMessage{
-		Type:          bob.MessageTypeCatchUpComplete,
-		FromLogID:     fromLogID,
-		ToLogID:       toLogID,
-		LogsDelivered: logsDelivered,
+// SendCatchUpComplete sends a catchUpComplete tickStream notification
+func (m *MockBobServer) SendCatchUpComplete() {
+	result := bob.TickStreamResult{
+		CatchUpComplete: true,
 	}
-
-	data, _ := json.Marshal(msg)
-	m.messagesToSend <- data
+	_ = m.SendTickStreamResult(result)
 }
 
 // WaitForSubscription blocks until a subscription is received or timeout
-func (m *MockBobServer) WaitForSubscription(timeout time.Duration) (bob.SubscribeRequest, error) {
+func (m *MockBobServer) WaitForSubscription(timeout time.Duration) (bob.TickStreamSubscribeParams, error) {
 	select {
-	case req := <-m.subscriptionCh:
-		return req, nil
+	case params := <-m.subscriptionCh:
+		return params, nil
 	case <-time.After(timeout):
-		return bob.SubscribeRequest{}, ErrTimeout
+		return bob.TickStreamSubscribeParams{}, ErrTimeout
 	}
 }
 

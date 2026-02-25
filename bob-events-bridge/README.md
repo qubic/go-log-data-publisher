@@ -278,6 +278,143 @@ The service implements automatic crash recovery:
 - **Read timeouts** trigger reconnection to recover from silent failures
 - **Graceful shutdown** with configurable timeout
 
+## Kafka Message Format
+
+Every event published to Kafka follows this envelope structure:
+
+```json
+{
+  "index": 0,
+  "type": 0,
+  "tickNumber": 22000001,
+  "epoch": 145,
+  "logDigest": "a1b2c3d4e5f60718",
+  "logId": 42,
+  "bodySize": 72,
+  "timestamp": 1718461800,
+  "transactionHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "body": {}
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `index` | uint64 | Zero-based index of the event within its tick |
+| `type` | uint32 | Log type identifier (see body formats below) |
+| `tickNumber` | uint32 | Tick number the event belongs to |
+| `epoch` | uint32 | Epoch number |
+| `logDigest` | string | Hex-encoded digest of the log entry |
+| `logId` | uint64 | Unique log ID from bob |
+| `bodySize` | uint32 | Size of the original body in bytes |
+| `timestamp` | uint64 | Unix timestamp in seconds |
+| `transactionHash` | string | 60-character Qubic transaction hash |
+| `body` | object | Event-specific payload (see below) |
+
+### Body by Log Type
+
+#### Type 0 — qu_transfer
+
+```json
+{
+  "source": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "destination": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "amount": 1000
+}
+```
+
+#### Type 1 — asset_issuance
+
+```json
+{
+  "assetIssuer": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "numberOfShares": 1000000,
+  "managingContractIndex": 5,
+  "assetName": "QX",
+  "numberOfDecimalPlaces": 0,
+  "unitOfMeasurement": "shares"
+}
+```
+
+#### Type 2 — asset_ownership_change
+
+```json
+{
+  "source": "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "destination": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "assetIssuer": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "assetName": "QX",
+  "numberOfShares": 200
+}
+```
+
+#### Type 3 — asset_possession_change
+
+```json
+{
+  "source": "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "destination": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "assetIssuer": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "assetName": "CFB",
+  "numberOfShares": 300
+}
+```
+
+#### Types 4–7 — contract messages (error / warning / information / debug)
+
+```json
+{
+  "scIndex": 1,
+  "scLogType": 42,
+  "content": "error: something failed"
+}
+```
+
+#### Type 8 — burning
+
+```json
+{
+  "source": "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "amount": 999,
+  "contractIndexBurnedFor": 7
+}
+```
+
+#### Types 9–12 — hex-encoded events (dust_burning, spectrum_stats, asset_ownership_managing_contract_change, asset_possession_managing_contract_change)
+
+```json
+{
+  "hex": "deadbeef0123456789abcdef"
+}
+```
+
+#### Type 13 — contract_reserve_deduction
+
+```json
+{
+  "deductedAmount": 5000,
+  "remainingAmount": 95000,
+  "contractIndex": 3
+}
+```
+
+#### Type 255 — custom_message
+
+```json
+{
+  "customMessage": "12345"
+}
+```
+
+#### Unknown types (default)
+
+Any log type not listed above is parsed as a hex body:
+
+```json
+{
+  "hex": "1f129599cc4910bb4d..."
+}
+```
+
 ## License
 
 [Add license information]

@@ -19,7 +19,6 @@ func CreateTestConfig(mockBob *MockBobServer, storagePath string) *config.Config
 		Bob: config.BobConfig{
 			WebSocketURL: mockBob.URL(),
 			StatusURL:    mockBob.StatusURL(),
-			LogTypes:     "0 1 2 3",
 		},
 		Storage: config.StorageConfig{
 			BasePath: storagePath,
@@ -88,14 +87,4 @@ func WaitForEventCount(t *testing.T, hasEventFn func() (int, error), expectedCou
 		count, err := hasEventFn()
 		return err == nil && count >= expectedCount
 	}, "expected event count not reached")
-}
-
-// TestSubscriptions returns the default test subscriptions
-func TestSubscriptions() []config.SubscriptionEntry {
-	return []config.SubscriptionEntry{
-		{SCIndex: 0, LogType: 0},
-		{SCIndex: 0, LogType: 1},
-		{SCIndex: 0, LogType: 2},
-		{SCIndex: 0, LogType: 3},
-	}
 }

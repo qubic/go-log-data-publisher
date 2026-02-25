@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	keyCurrentEpoch   = "state:current_epoch"
-	keyLastLogID      = "state:last_log_id"
-	keyLastTick       = "state:last_tick"
-	keyEpochMinTick   = "state:epoch:%d:min_tick"
-	keyEpochMaxTick   = "state:epoch:%d:max_tick"
+	keyCurrentEpoch    = "state:current_epoch"
+	keyLastLogID       = "state:last_log_id"
+	keyLastTick        = "state:last_tick"
+	keyEpochMinTick    = "state:epoch:%d:min_tick"
+	keyEpochMaxTick    = "state:epoch:%d:max_tick"
 	keyEpochEventCount = "state:epoch:%d:event_count"
 )
 
@@ -40,10 +40,10 @@ func (s *StateStore) Close() error {
 
 // State represents the current processing state
 type State struct {
-	CurrentEpoch  uint32
-	LastLogID     int64
-	LastTick      uint32
-	HasState      bool
+	CurrentEpoch uint32
+	LastLogID    int64
+	LastTick     uint32
+	HasState     bool
 }
 
 // LoadState loads the complete state from the database
