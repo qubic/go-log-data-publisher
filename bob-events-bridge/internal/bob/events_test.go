@@ -176,14 +176,14 @@ func TestParseEventBody_CustomMessage(t *testing.T) {
 }
 
 func TestParseEventBody_UnknownLogType(t *testing.T) {
-	body := json.RawMessage(`{"foo": "bar"}`)
+	body := json.RawMessage(`{"hex": "deadbeef"}`)
 
 	result, err := ParseEventBody(999, body)
 	require.NoError(t, err)
 
-	parsed, ok := result.(map[string]interface{})
-	require.True(t, ok, "unknown log type should return map[string]interface{}")
-	assert.Equal(t, "bar", parsed["foo"])
+	parsed, ok := result.(*HexBody)
+	require.True(t, ok, "unknown log type should return *HexBody")
+	assert.Equal(t, "deadbeef", parsed.Hex)
 }
 
 func TestParseEventBody_MalformedBody(t *testing.T) {

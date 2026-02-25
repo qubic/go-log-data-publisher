@@ -1382,19 +1382,16 @@ func TestE2E_LogType255_CustomMessage(t *testing.T) {
 
 func TestE2E_UnknownLogType_Passthrough(t *testing.T) {
 	runLogTypeE2ETest(t, logTypeTestCase{
-		name:      "unknown_log_type_14",
-		eventType: 14,
+		name:      "unknown_log_type_999",
+		eventType: 999,
 		bobBody: map[string]any{
-			"someField":    "someValue",
-			"anotherField": 42,
+			"hex": "deadbeef0123456789abcdef",
 		},
 		grpcChecks: map[string]any{
-			"someField":    "someValue",
-			"anotherField": float64(42),
+			"hex": "deadbeef0123456789abcdef",
 		},
 		kafkaChecks: map[string]any{
-			"someField":    "someValue",
-			"anotherField": float64(42),
+			"hex": "deadbeef0123456789abcdef",
 		},
 	})
 }

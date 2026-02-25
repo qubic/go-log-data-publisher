@@ -98,7 +98,7 @@ type ContractMessageBody struct {
 	Content   string `json:"content"`
 }
 
-// HexBody represents the body of hex-encoded events (log types 9, 10, 11, 12)
+// HexBody represents the body of hex-encoded events (log types 9, 10, 11, 12) and the default for unknown types
 type HexBody struct {
 	Hex string `json:"hex"`
 }
@@ -110,7 +110,7 @@ type CustomMessageBody struct {
 
 // ParseEventBody unmarshals the raw body JSON into the typed struct for the
 // given log type. Returns the typed struct as interface{}. Unknown log types
-// are parsed as a generic map[string]any so they pass through without error.
+// default to HexBody since bob sends undocumented types as hex.
 func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 	if len(body) == 0 {
 		return nil, nil
@@ -139,12 +139,8 @@ func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 	case LogTypeCustomMessage:
 		target = &CustomMessageBody{}
 	default:
-		// Unknown log type — pass through the raw body as a generic map
-		var m map[string]interface{}
-		if err := json.Unmarshal(body, &m); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal body for unknown log type %d: %w", logType, err)
-		}
-		return m, nil
+		// Unknown log type — parse as HexBody (bob sends unknown types as hex)
+		target = &HexBody{}
 	}
 
 	if err := json.Unmarshal(body, target); err != nil {

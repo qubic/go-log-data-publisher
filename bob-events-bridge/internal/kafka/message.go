@@ -94,10 +94,6 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 			"customMessage": b.CustomMessage,
 		}, nil
 
-	case map[string]any:
-		// Unknown log type — pass through as-is
-		return b, nil
-
 	default:
 		return nil, fmt.Errorf("unsupported event body type: %T", body)
 	}

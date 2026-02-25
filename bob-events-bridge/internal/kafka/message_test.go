@@ -201,18 +201,16 @@ func TestTransformEventBody_CustomMessage(t *testing.T) {
 	}
 }
 
-func TestTransformEventBody_UnknownLogTypePassthrough(t *testing.T) {
-	body := map[string]any{
-		"foo": "bar",
-		"num": float64(42),
+func TestTransformEventBody_UnknownLogTypeHexBody(t *testing.T) {
+	body := &bob.HexBody{
+		Hex: "deadbeef0123456789abcdef",
 	}
 
 	result, err := TransformEventBody(999, body)
 	require.NoError(t, err)
 
 	expected := map[string]any{
-		"foo": "bar",
-		"num": float64(42),
+		"hex": "deadbeef0123456789abcdef",
 	}
 	if diff := cmp.Diff(expected, result); diff != "" {
 		t.Errorf("mismatch (-want +got):\n%s", diff)
@@ -221,7 +219,7 @@ func TestTransformEventBody_UnknownLogTypePassthrough(t *testing.T) {
 
 func TestTransformEventBody_UnsupportedType(t *testing.T) {
 	body := struct{ Foo string }{Foo: "bar"}
-	_, err := TransformEventBody(99, &body)
+	_, err := TransformEventBody(99, body)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported event body type")
 }
