@@ -57,7 +57,7 @@ type LogFilter struct {
 
 // TickStreamSubscribeParams for qubic_subscribe
 type TickStreamSubscribeParams struct {
-	LogFilters     []LogFilter `json:"logFilters"`
+	LogFilters     []LogFilter `json:"logFilters,omitempty"`
 	ExcludeTxs     bool        `json:"excludeTxs"`
 	SkipEmptyTicks bool        `json:"skipEmptyTicks"`
 	StartTick      uint32      `json:"startTick,omitempty"`

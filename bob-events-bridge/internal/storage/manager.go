@@ -14,11 +14,11 @@ import (
 
 // Manager manages multiple epoch databases
 type Manager struct {
-	basePath   string
-	logger     *zap.Logger
-	state      *StateStore
-	epochDBs   map[uint32]*EpochDB
-	mu         sync.RWMutex
+	basePath string
+	logger   *zap.Logger
+	state    *StateStore
+	epochDBs map[uint32]*EpochDB
+	mu       sync.RWMutex
 }
 
 // NewManager creates a new storage manager

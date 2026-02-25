@@ -37,7 +37,8 @@ Bob Node (WebSocket) → Processor → Storage Manager → Epoch DBs (PebbleDB)
 
 **Processor** (`internal/processor/processor.go`): Core event loop that:
 - Maintains WebSocket connection to bob with auto-reconnect
-- Subscribes to log types (0: qu_transfer, 1: asset_issuance, 2: asset_ownership_change, 3: asset_possession_change, 8: burning, 13: contract_reserve_deduction)
+- Subscribes to all log types via tickStream (no logFilters — receives all events)
+- Supported log types: 0 (qu_transfer), 1 (asset_issuance), 2 (asset_ownership_change), 3 (asset_possession_change), 4-7 (contract messages), 8 (burning), 9 (dust_burning), 10 (spectrum_stats), 11 (asset_ownership_managing_contract_change), 12 (asset_possession_managing_contract_change), 13 (contract_reserve_deduction), 255 (custom_message)
 - Handles crash recovery via lastTick-based resumption
 - Deduplicates events before storage
 
@@ -59,7 +60,6 @@ Bob Node (WebSocket) → Processor → Storage Manager → Epoch DBs (PebbleDB)
 
 Environment variables prefixed with `BOB_EVENTS_`:
 - `BOB_EVENTS_BOB_WEBSOCKETURL` (default: `ws://localhost:40420/ws/qubic`)
-- `BOB_EVENTS_BOB_LOGTYPES` (default: `0 1 2 3 8 13` - space-separated log type IDs)
 - `BOB_EVENTS_STORAGE_BASEPATH` (default: `data/bob-events-bridge`)
 - `BOB_EVENTS_SERVER_GRPCADDR` (default: `0.0.0.0:8001`)
 - `BOB_EVENTS_SERVER_HTTPADDR` (default: `0.0.0.0:8000`)
@@ -193,6 +193,16 @@ Events with `"ok": false` are skipped by the processor.
 }
 ```
 
+**Types 4-7 — contract messages (error/warning/information/debug)**
+**bob format & kafka format** (no field renames)
+```json
+{
+  "scIndex": <uint32>,
+  "scLogType": <uint32>,
+  "content": "<string>"
+}
+```
+
 **Type 8 — burning**
 **bob format**
 ```json
@@ -212,8 +222,16 @@ Events with `"ok": false` are skipped by the processor.
 }
 ```
 
+**Types 9-12 — hex-encoded events (dust_burning, spectrum_stats, asset_ownership/possession_managing_contract_change)**
+**bob format & kafka format** (no field renames, bob sends these as hex dumps)
+```json
+{
+  "hex": "<hex_string>"
+}
+```
+
 **Type 13 — contract_reserve_deduction**
-**bob format**
+**bob format & kafka format** (no field renames)
 ```json
 {
   "deductedAmount": <uint64>,
@@ -222,12 +240,11 @@ Events with `"ok": false` are skipped by the processor.
 }
 ```
 
-**kafka format - from bob format <bob_{field}>**
+**Type 255 — custom_message**
+**bob format & kafka format** (no field renames)
 ```json
 {
-  "deductedAmount": <uint64>,
-  "remainingAmount": <int64>,
-  "contractIndex": <uint32>
+  "customMessage": "<string>"
 }
 ```
 
@@ -235,8 +252,7 @@ Events with `"ok": false` are skipped by the processor.
 **Kafka entire message format**
 ```json
 {
-  "index": <uint64>, // eveng log index created by use
-  "emittingContractIndex": <scIndex from bob>,
+  "index": <uint64>,
   "type": <logType from bob>,
   "tickNumber": <tick from bob>,
   "epoch": 192,
@@ -245,7 +261,7 @@ Events with `"ok": false` are skipped by the processor.
   "bodySize": 72,
   "timestamp": <uint64_unix_seconds_from_bob>,
   "transactionHash": <txHash from bob>,
-  "body": {} // this is the event body which differs for each event type, the format is above for each format
+  "body": {}
 }
 ```
 

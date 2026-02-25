@@ -57,7 +57,7 @@ func (c *WSClient) Connect() error {
 
 // Subscribe sends a JSON-RPC 2.0 qubic_subscribe request for tickStream
 // and returns the subscription ID from the response.
-func (c *WSClient) Subscribe(logFilters []LogFilter, startTick uint32) (string, error) {
+func (c *WSClient) Subscribe(startTick uint32) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -66,7 +66,6 @@ func (c *WSClient) Subscribe(logFilters []LogFilter, startTick uint32) (string, 
 	}
 
 	params := TickStreamSubscribeParams{
-		LogFilters:     logFilters,
 		ExcludeTxs:     true,
 		SkipEmptyTicks: true,
 	}
@@ -91,7 +90,6 @@ func (c *WSClient) Subscribe(logFilters []LogFilter, startTick uint32) (string, 
 	}
 
 	c.logger.Info("Sent tickStream subscription",
-		zap.Int("numFilters", len(logFilters)),
 		zap.Uint32("startTick", startTick))
 
 	// Read the JSON-RPC response to get subscription ID

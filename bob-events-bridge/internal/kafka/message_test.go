@@ -149,6 +149,58 @@ func TestTransformEventBody_NilBody(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestTransformEventBody_ContractMessage(t *testing.T) {
+	body := &bob.ContractMessageBody{
+		SCIndex:   5,
+		SCLogType: 42,
+		Content:   "error: something failed",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeContractErrorMessage, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"scIndex":   uint32(5),
+		"scLogType": uint32(42),
+		"content":   "error: something failed",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTransformEventBody_HexBody(t *testing.T) {
+	body := &bob.HexBody{
+		Hex: "deadbeef0123456789abcdef",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeDustBurning, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"hex": "deadbeef0123456789abcdef",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTransformEventBody_CustomMessage(t *testing.T) {
+	body := &bob.CustomMessageBody{
+		CustomMessage: "12345",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeCustomMessage, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"customMessage": "12345",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTransformEventBody_UnsupportedType(t *testing.T) {
 	body := struct{ Foo string }{Foo: "bar"}
 	_, err := TransformEventBody(99, &body)
@@ -175,11 +227,10 @@ func TestBuildEventMessage(t *testing.T) {
 		Amount: 1000,
 	}
 
-	msg, err := BuildEventMessage(0, payload, body, 3)
+	msg, err := BuildEventMessage(payload, body, 3)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(3), msg.Index)
-	assert.Equal(t, uint32(0), msg.EmittingContractIndex)
 	assert.Equal(t, uint32(0), msg.Type)
 	assert.Equal(t, uint32(22000001), msg.TickNumber)
 	assert.Equal(t, uint32(145), msg.Epoch)
@@ -205,7 +256,7 @@ func TestBuildEventMessage_NilBody(t *testing.T) {
 		TxHash:    "TXHASH",
 	}
 
-	msg, err := BuildEventMessage(0, payload, nil, 0)
+	msg, err := BuildEventMessage(payload, nil, 0)
 	require.NoError(t, err)
 	assert.Nil(t, msg.Body)
 }

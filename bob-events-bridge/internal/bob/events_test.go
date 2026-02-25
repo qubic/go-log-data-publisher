@@ -124,6 +124,57 @@ func TestParseEventBody_ContractReserveDeduction(t *testing.T) {
 	assert.Equal(t, uint32(3), parsed.ContractIndex)
 }
 
+func TestParseEventBody_ContractMessage(t *testing.T) {
+	body := json.RawMessage(`{
+		"scIndex": 5,
+		"scLogType": 42,
+		"content": "error: something failed"
+	}`)
+
+	// Test for all contract message types (4, 5, 6, 7)
+	for _, logType := range []uint32{LogTypeContractErrorMessage, LogTypeContractWarningMessage,
+		LogTypeContractInformationMessage, LogTypeContractDebugMessage} {
+		result, err := ParseEventBody(logType, body)
+		require.NoError(t, err, "logType %d", logType)
+
+		parsed, ok := result.(*ContractMessageBody)
+		require.True(t, ok, "logType %d", logType)
+		assert.Equal(t, uint32(5), parsed.SCIndex)
+		assert.Equal(t, uint32(42), parsed.SCLogType)
+		assert.Equal(t, "error: something failed", parsed.Content)
+	}
+}
+
+func TestParseEventBody_HexBody(t *testing.T) {
+	body := json.RawMessage(`{
+		"hex": "deadbeef0123456789abcdef"
+	}`)
+
+	// Test for all hex types (9, 10, 11, 12)
+	for _, logType := range []uint32{LogTypeDustBurning, LogTypeSpectrumStats,
+		LogTypeAssetOwnershipManagingContractChange, LogTypeAssetPossessionManagingContractChange} {
+		result, err := ParseEventBody(logType, body)
+		require.NoError(t, err, "logType %d", logType)
+
+		parsed, ok := result.(*HexBody)
+		require.True(t, ok, "logType %d", logType)
+		assert.Equal(t, "deadbeef0123456789abcdef", parsed.Hex)
+	}
+}
+
+func TestParseEventBody_CustomMessage(t *testing.T) {
+	body := json.RawMessage(`{
+		"customMessage": "12345"
+	}`)
+
+	result, err := ParseEventBody(LogTypeCustomMessage, body)
+	require.NoError(t, err)
+
+	parsed, ok := result.(*CustomMessageBody)
+	require.True(t, ok)
+	assert.Equal(t, "12345", parsed.CustomMessage)
+}
+
 func TestParseEventBody_UnknownLogType(t *testing.T) {
 	body := json.RawMessage(`{"foo": "bar"}`)
 

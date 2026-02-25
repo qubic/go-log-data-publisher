@@ -7,21 +7,39 @@ import (
 
 // Log type constants
 const (
-	LogTypeQuTransfer               uint32 = 0
-	LogTypeAssetIssuance            uint32 = 1
-	LogTypeAssetOwnershipChange     uint32 = 2
-	LogTypeAssetPossessionChange    uint32 = 3
-	LogTypeBurning                  uint32 = 8
-	LogTypeContractReserveDeduction uint32 = 13
+	LogTypeQuTransfer                            uint32 = 0
+	LogTypeAssetIssuance                         uint32 = 1
+	LogTypeAssetOwnershipChange                  uint32 = 2
+	LogTypeAssetPossessionChange                 uint32 = 3
+	LogTypeContractErrorMessage                  uint32 = 4
+	LogTypeContractWarningMessage                uint32 = 5
+	LogTypeContractInformationMessage            uint32 = 6
+	LogTypeContractDebugMessage                  uint32 = 7
+	LogTypeBurning                               uint32 = 8
+	LogTypeDustBurning                           uint32 = 9
+	LogTypeSpectrumStats                         uint32 = 10
+	LogTypeAssetOwnershipManagingContractChange  uint32 = 11
+	LogTypeAssetPossessionManagingContractChange uint32 = 12
+	LogTypeContractReserveDeduction              uint32 = 13
+	LogTypeCustomMessage                         uint32 = 255
 )
 
 var LogTypeNames = map[uint32]string{
-	LogTypeQuTransfer:               "qu_transfer",
-	LogTypeAssetIssuance:            "asset_issuance",
-	LogTypeAssetOwnershipChange:     "asset_ownership_change",
-	LogTypeAssetPossessionChange:    "asset_possession_change",
-	LogTypeBurning:                  "burning",
-	LogTypeContractReserveDeduction: "contract_reserve_deduction",
+	LogTypeQuTransfer:                            "qu_transfer",
+	LogTypeAssetIssuance:                         "asset_issuance",
+	LogTypeAssetOwnershipChange:                  "asset_ownership_change",
+	LogTypeAssetPossessionChange:                 "asset_possession_change",
+	LogTypeContractErrorMessage:                  "contract_error_message",
+	LogTypeContractWarningMessage:                "contract_warning_message",
+	LogTypeContractInformationMessage:            "contract_information_message",
+	LogTypeContractDebugMessage:                  "contract_debug_message",
+	LogTypeBurning:                               "burning",
+	LogTypeDustBurning:                           "dust_burning",
+	LogTypeSpectrumStats:                         "spectrum_stats",
+	LogTypeAssetOwnershipManagingContractChange:  "asset_ownership_managing_contract_change",
+	LogTypeAssetPossessionManagingContractChange: "asset_possession_managing_contract_change",
+	LogTypeContractReserveDeduction:              "contract_reserve_deduction",
+	LogTypeCustomMessage:                         "custom_message",
 }
 
 // QuTransferBody represents the body of a qu_transfer event (log type 0)
@@ -73,6 +91,23 @@ type ContractReserveDeductionBody struct {
 	ContractIndex   uint32 `json:"contractIndex"`
 }
 
+// ContractMessageBody represents the body of contract message events (log types 4-7)
+type ContractMessageBody struct {
+	SCIndex   uint32 `json:"scIndex"`
+	SCLogType uint32 `json:"scLogType"`
+	Content   string `json:"content"`
+}
+
+// HexBody represents the body of hex-encoded events (log types 9, 10, 11, 12)
+type HexBody struct {
+	Hex string `json:"hex"`
+}
+
+// CustomMessageBody represents the body of a custom_message event (log type 255)
+type CustomMessageBody struct {
+	CustomMessage string `json:"customMessage"`
+}
+
 // ParseEventBody unmarshals the raw body JSON into the typed struct for the
 // given log type. Returns the typed struct as interface{}. Returns an error if
 // the log type is unknown or the body is malformed.
@@ -91,10 +126,18 @@ func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 		target = &AssetOwnershipChangeBody{}
 	case LogTypeAssetPossessionChange:
 		target = &AssetPossessionChangeBody{}
+	case LogTypeContractErrorMessage, LogTypeContractWarningMessage,
+		LogTypeContractInformationMessage, LogTypeContractDebugMessage:
+		target = &ContractMessageBody{}
 	case LogTypeBurning:
 		target = &BurningBody{}
+	case LogTypeDustBurning, LogTypeSpectrumStats,
+		LogTypeAssetOwnershipManagingContractChange, LogTypeAssetPossessionManagingContractChange:
+		target = &HexBody{}
 	case LogTypeContractReserveDeduction:
 		target = &ContractReserveDeductionBody{}
+	case LogTypeCustomMessage:
+		target = &CustomMessageBody{}
 	default:
 		return nil, fmt.Errorf("unknown log type: %d", logType)
 	}

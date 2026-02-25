@@ -13,7 +13,6 @@ import (
 
 	eventsbridge "github.com/qubic/bob-events-bridge/api/events-bridge/v1"
 	"github.com/qubic/bob-events-bridge/internal/bob"
-	"github.com/qubic/bob-events-bridge/internal/config"
 	"github.com/qubic/bob-events-bridge/internal/grpc"
 	"github.com/qubic/bob-events-bridge/internal/kafka"
 	"github.com/qubic/bob-events-bridge/internal/metrics"
@@ -59,8 +58,7 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 
 	// 3. Create processor
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	// 4. Start processor
 	ctx, cancel := context.WithCancel(context.Background())
@@ -121,8 +119,7 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -193,8 +190,7 @@ func TestE2E_EpochTransition(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -268,8 +264,7 @@ func TestE2E_Deduplication(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -336,8 +331,7 @@ func TestE2E_StatePersistence(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -390,8 +384,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 		require.NoError(t, err)
 
 		cfg := CreateTestConfig(mockBob, tempDir)
-		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+		proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -428,8 +421,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil, newTestMetrics())
+	proc2 := processor.NewProcessor(cfg2, storageMgr2, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)
@@ -461,8 +453,7 @@ func TestE2E_GetStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -523,8 +514,7 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -587,8 +577,7 @@ func TestE2E_NonOKLogsSkipped(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -654,13 +643,7 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	// Subscribe to multiple log types
-	subs := []config.SubscriptionEntry{
-		{SCIndex: 0, LogType: 0}, // qu_transfer
-		{SCIndex: 0, LogType: 1}, // asset_issuance
-		{SCIndex: 0, LogType: 2}, // asset_ownership_change
-	}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -721,8 +704,7 @@ func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -821,8 +803,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 		require.NoError(t, err)
 
 		cfg := CreateTestConfig(mockBob, tempDir)
-		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), nil, newTestMetrics())
+		proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -866,8 +847,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), nil, newTestMetrics())
+	proc2 := processor.NewProcessor(cfg2, storageMgr2, zap.NewNop(), nil, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)
@@ -935,8 +915,7 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 
 	mockKafka := kafka.NewMockPublisher()
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -977,7 +956,6 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 
 	msg := msgs[0]
 	assert.Equal(t, uint64(0), msg.Index)
-	assert.Equal(t, uint32(0), msg.EmittingContractIndex)
 	assert.Equal(t, uint32(0), msg.Type)
 	assert.Equal(t, uint32(22000001), msg.TickNumber)
 	assert.Equal(t, uint32(145), msg.Epoch)
@@ -992,8 +970,19 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 	assert.Equal(t, int64(1000), msg.Body["amount"])
 }
 
-// TestE2E_KafkaBodyTransformations tests body transformations for all event types
-func TestE2E_KafkaBodyTransformations(t *testing.T) {
+// logTypeTestCase defines a single log type e2e test
+type logTypeTestCase struct {
+	name        string
+	eventType   uint32
+	bobBody     map[string]any
+	grpcChecks  map[string]any // expected fields in gRPC body (bob format)
+	kafkaChecks map[string]any // expected fields in Kafka body (transformed)
+}
+
+// runLogTypeE2ETest runs a standard e2e test for a single log type
+func runLogTypeE2ETest(t *testing.T, tc logTypeTestCase) {
+	t.Helper()
+
 	mockBob := NewMockBobServer(145, 22000000)
 	defer mockBob.Close()
 
@@ -1003,15 +992,7 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 
 	mockKafka := kafka.NewMockPublisher()
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{
-		{SCIndex: 0, LogType: 0},
-		{SCIndex: 0, LogType: 1},
-		{SCIndex: 0, LogType: 2},
-		{SCIndex: 0, LogType: 3},
-		{SCIndex: 0, LogType: 8},
-		{SCIndex: 0, LogType: 13},
-	}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -1021,105 +1002,382 @@ func TestE2E_KafkaBodyTransformations(t *testing.T) {
 		_ = storageMgr.Close()
 	}()
 
-	// Only 1 subscription now (single tickStream subscribe)
 	_, err = mockBob.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
 	tick := uint32(22000001)
-
-	// Type 0: qu_transfer
-	p0 := CreateLogPayloadWithTimestamp(145, tick, 1, 0, map[string]any{
-		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-		"amount": 500,
-	}, uint64(1718461800))
-
-	// Type 1: asset_issuance
-	p1 := CreateLogPayloadWithTimestamp(145, tick, 2, 1, map[string]any{
-		"issuerPublicKey":       "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"numberOfShares":        100000,
-		"managingContractIndex": 5,
-		"name":                  "QX",
-		"numberOfDecimalPlaces": 0,
-		"unitOfMeasurement":     "shares",
-	}, uint64(1718461800))
-
-	// Type 2: asset_ownership_change
-	p2 := CreateLogPayloadWithTimestamp(145, tick, 3, 2, map[string]any{
-		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"assetName":            "QX",
-		"numberOfShares":       200,
-	}, uint64(1718461800))
-
-	// Type 3: asset_possession_change
-	p3 := CreateLogPayloadWithTimestamp(145, tick, 4, 3, map[string]any{
-		"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"assetName":            "CFB",
-		"numberOfShares":       300,
-	}, uint64(1718461800))
-
-	// Type 8: burning
-	p8 := CreateLogPayloadWithTimestamp(145, tick, 5, 8, map[string]any{
-		"publicKey":              "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"amount":                 999,
-		"contractIndexBurnedFor": 7,
-	}, uint64(1718461800))
-
-	// Type 13: contract_reserve_deduction
-	p13 := CreateLogPayloadWithTimestamp(145, tick, 6, 13, map[string]any{
-		"deductedAmount":  5000,
-		"remainingAmount": 95000,
-		"contractIndex":   3,
-	}, uint64(1718461800))
-
-	// Send all events in one tickStream message
+	payload := CreateLogPayloadWithTimestamp(145, tick, 1, tc.eventType, tc.bobBody, uint64(1718461800))
 	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
 		Epoch:        145,
 		Tick:         tick,
-		TotalLogs:    6,
-		FilteredLogs: 6,
-		Logs:         []bob.LogPayload{p0, p1, p2, p3, p8, p13},
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
 	})
 	require.NoError(t, err)
 	mockBob.SendCatchUpComplete()
 
-	// Wait for all events to be stored
+	// Wait for storage
 	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
-		return len(mockKafka.Messages()) >= 6
-	}, "all 6 kafka messages should be published")
+		exists, _ := storageMgr.HasEvent(145, tick, 1)
+		return exists
+	}, "event should be stored")
 
+	// Verify gRPC response
+	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
+	resp, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tick})
+	require.NoError(t, err)
+	require.Len(t, resp.Events, 1)
+
+	event := resp.Events[0]
+	assert.Equal(t, tc.eventType, event.EventType)
+	assert.Equal(t, uint64(1), event.LogId)
+	assert.Equal(t, tick, event.Tick)
+	assert.Equal(t, uint32(145), event.Epoch)
+
+	if tc.grpcChecks != nil {
+		bodyFields := event.GetBody().GetFields()
+		for key, expected := range tc.grpcChecks {
+			switch v := expected.(type) {
+			case string:
+				assert.Equal(t, v, bodyFields[key].GetStringValue(), "gRPC body field %s", key)
+			case float64:
+				assert.Equal(t, v, bodyFields[key].GetNumberValue(), "gRPC body field %s", key)
+			case int:
+				assert.Equal(t, float64(v), bodyFields[key].GetNumberValue(), "gRPC body field %s", key)
+			}
+		}
+	}
+
+	// Verify Kafka message
 	msgs := mockKafka.Messages()
-	require.Len(t, msgs, 6)
+	require.Len(t, msgs, 1)
 
-	// Verify type 0 body: from→source, to→destination
-	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[0].Body["source"])
-	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", msgs[0].Body["destination"])
+	msg := msgs[0]
+	assert.Equal(t, tc.eventType, msg.Type)
+	assert.Equal(t, uint64(1), msg.LogID)
+	assert.Equal(t, tick, msg.TickNumber)
+	assert.Equal(t, uint32(145), msg.Epoch)
+	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msg.TransactionHash)
+	assert.Equal(t, uint64(1718461800), msg.Timestamp)
 
-	// Verify type 1 body: issuerPublicKey→assetIssuer, name→assetName
-	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[1].Body["assetIssuer"])
-	assert.Equal(t, "QX", msgs[1].Body["assetName"])
+	if tc.kafkaChecks != nil {
+		for key, expected := range tc.kafkaChecks {
+			assert.Equal(t, expected, msg.Body[key], "Kafka body field %s", key)
+		}
+	}
+}
 
-	// Verify type 2 body: sourcePublicKey→source, destinationPublicKey→destination, issuerPublicKey→assetIssuer
-	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["source"])
-	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["destination"])
-	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[2].Body["assetIssuer"])
+func TestE2E_LogType0_QuTransfer(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "qu_transfer",
+		eventType: 0,
+		bobBody: map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": 500,
+		},
+		grpcChecks: map[string]any{
+			"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount": float64(500),
+		},
+		kafkaChecks: map[string]any{
+			"source":      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"destination": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"amount":      int64(500),
+		},
+	})
+}
 
-	// Verify type 3 body: sourcePublicKey→source, destinationPublicKey→destination, issuerPublicKey→assetIssuer
-	assert.Equal(t, "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["source"])
-	assert.Equal(t, "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["destination"])
-	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[3].Body["assetIssuer"])
+func TestE2E_LogType1_AssetIssuance(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "asset_issuance",
+		eventType: 1,
+		bobBody: map[string]any{
+			"issuerPublicKey":       "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"numberOfShares":        100000,
+			"managingContractIndex": 5,
+			"name":                  "QX",
+			"numberOfDecimalPlaces": 0,
+			"unitOfMeasurement":     "shares",
+		},
+		grpcChecks: map[string]any{
+			"issuerPublicKey": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"name":            "QX",
+		},
+		kafkaChecks: map[string]any{
+			"assetIssuer":           "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetName":             "QX",
+			"numberOfShares":        int64(100000),
+			"managingContractIndex": int64(5),
+			"numberOfDecimalPlaces": 0,
+			"unitOfMeasurement":     "shares",
+		},
+	})
+}
 
-	// Verify type 8 body: publicKey→source
-	assert.Equal(t, "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msgs[4].Body["source"])
+func TestE2E_LogType2_AssetOwnershipChange(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "asset_ownership_change",
+		eventType: 2,
+		bobBody: map[string]any{
+			"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetName":            "QX",
+			"numberOfShares":       200,
+		},
+		grpcChecks: map[string]any{
+			"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		},
+		kafkaChecks: map[string]any{
+			"source":         "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"destination":    "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetIssuer":    "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetName":      "QX",
+			"numberOfShares": int64(200),
+		},
+	})
+}
 
-	// Verify type 13 body: no renames
-	assert.NotNil(t, msgs[5].Body["deductedAmount"])
-	assert.NotNil(t, msgs[5].Body["remainingAmount"])
-	assert.NotNil(t, msgs[5].Body["contractIndex"])
+func TestE2E_LogType3_AssetPossessionChange(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "asset_possession_change",
+		eventType: 3,
+		bobBody: map[string]any{
+			"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetName":            "CFB",
+			"numberOfShares":       300,
+		},
+		grpcChecks: map[string]any{
+			"sourcePublicKey":      "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"destinationPublicKey": "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":      "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		},
+		kafkaChecks: map[string]any{
+			"source":         "SRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"destination":    "DSTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetIssuer":    "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetName":      "CFB",
+			"numberOfShares": int64(300),
+		},
+	})
+}
+
+func TestE2E_LogType4_ContractErrorMessage(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "contract_error_message",
+		eventType: 4,
+		bobBody: map[string]any{
+			"scIndex":   1,
+			"scLogType": 42,
+			"content":   "error: something failed",
+		},
+		grpcChecks: map[string]any{
+			"scIndex":   float64(1),
+			"scLogType": float64(42),
+			"content":   "error: something failed",
+		},
+		kafkaChecks: map[string]any{
+			"scIndex":   uint32(1),
+			"scLogType": uint32(42),
+			"content":   "error: something failed",
+		},
+	})
+}
+
+func TestE2E_LogType5_ContractWarningMessage(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "contract_warning_message",
+		eventType: 5,
+		bobBody: map[string]any{
+			"scIndex":   2,
+			"scLogType": 10,
+			"content":   "warning: low resources",
+		},
+		grpcChecks: map[string]any{
+			"scIndex":   float64(2),
+			"scLogType": float64(10),
+			"content":   "warning: low resources",
+		},
+		kafkaChecks: map[string]any{
+			"scIndex":   uint32(2),
+			"scLogType": uint32(10),
+			"content":   "warning: low resources",
+		},
+	})
+}
+
+func TestE2E_LogType6_ContractInformationMessage(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "contract_information_message",
+		eventType: 6,
+		bobBody: map[string]any{
+			"scIndex":   3,
+			"scLogType": 5,
+			"content":   "info: operation completed",
+		},
+		grpcChecks: map[string]any{
+			"scIndex":   float64(3),
+			"scLogType": float64(5),
+			"content":   "info: operation completed",
+		},
+		kafkaChecks: map[string]any{
+			"scIndex":   uint32(3),
+			"scLogType": uint32(5),
+			"content":   "info: operation completed",
+		},
+	})
+}
+
+func TestE2E_LogType7_ContractDebugMessage(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "contract_debug_message",
+		eventType: 7,
+		bobBody: map[string]any{
+			"scIndex":   4,
+			"scLogType": 99,
+			"content":   "debug: state dump",
+		},
+		grpcChecks: map[string]any{
+			"scIndex":   float64(4),
+			"scLogType": float64(99),
+			"content":   "debug: state dump",
+		},
+		kafkaChecks: map[string]any{
+			"scIndex":   uint32(4),
+			"scLogType": uint32(99),
+			"content":   "debug: state dump",
+		},
+	})
+}
+
+func TestE2E_LogType8_Burning(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "burning",
+		eventType: 8,
+		bobBody: map[string]any{
+			"publicKey":              "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"amount":                 999,
+			"contractIndexBurnedFor": 7,
+		},
+		grpcChecks: map[string]any{
+			"publicKey": "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"amount":    float64(999),
+		},
+		kafkaChecks: map[string]any{
+			"source":                 "BURNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"amount":                 int64(999),
+			"contractIndexBurnedFor": uint32(7),
+		},
+	})
+}
+
+func TestE2E_LogType9_DustBurning(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "dust_burning",
+		eventType: 9,
+		bobBody: map[string]any{
+			"hex": "deadbeef0123456789abcdef",
+		},
+		grpcChecks: map[string]any{
+			"hex": "deadbeef0123456789abcdef",
+		},
+		kafkaChecks: map[string]any{
+			"hex": "deadbeef0123456789abcdef",
+		},
+	})
+}
+
+func TestE2E_LogType10_SpectrumStats(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "spectrum_stats",
+		eventType: 10,
+		bobBody: map[string]any{
+			"hex": "aabbccddee",
+		},
+		grpcChecks: map[string]any{
+			"hex": "aabbccddee",
+		},
+		kafkaChecks: map[string]any{
+			"hex": "aabbccddee",
+		},
+	})
+}
+
+func TestE2E_LogType11_AssetOwnershipManagingContractChange(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "asset_ownership_managing_contract_change",
+		eventType: 11,
+		bobBody: map[string]any{
+			"hex": "112233445566",
+		},
+		grpcChecks: map[string]any{
+			"hex": "112233445566",
+		},
+		kafkaChecks: map[string]any{
+			"hex": "112233445566",
+		},
+	})
+}
+
+func TestE2E_LogType12_AssetPossessionManagingContractChange(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "asset_possession_managing_contract_change",
+		eventType: 12,
+		bobBody: map[string]any{
+			"hex": "ffeeddccbbaa",
+		},
+		grpcChecks: map[string]any{
+			"hex": "ffeeddccbbaa",
+		},
+		kafkaChecks: map[string]any{
+			"hex": "ffeeddccbbaa",
+		},
+	})
+}
+
+func TestE2E_LogType13_ContractReserveDeduction(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "contract_reserve_deduction",
+		eventType: 13,
+		bobBody: map[string]any{
+			"deductedAmount":  5000,
+			"remainingAmount": 95000,
+			"contractIndex":   3,
+		},
+		grpcChecks: map[string]any{
+			"deductedAmount":  float64(5000),
+			"remainingAmount": float64(95000),
+			"contractIndex":   float64(3),
+		},
+		kafkaChecks: map[string]any{
+			"deductedAmount":  uint64(5000),
+			"remainingAmount": int64(95000),
+			"contractIndex":   uint32(3),
+		},
+	})
+}
+
+func TestE2E_LogType255_CustomMessage(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "custom_message",
+		eventType: 255,
+		bobBody: map[string]any{
+			"customMessage": "12345",
+		},
+		grpcChecks: map[string]any{
+			"customMessage": "12345",
+		},
+		kafkaChecks: map[string]any{
+			"customMessage": "12345",
+		},
+	})
 }
 
 // TestE2E_KafkaPublishFailure tests that processor disconnects and retries on Kafka failure
@@ -1136,8 +1394,7 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 	mockKafka.SetFailNext(fmt.Errorf("kafka broker unavailable"))
 
 	cfg := CreateTestConfig(mockBob, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc)
@@ -1218,8 +1475,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 
 		mockKafka := kafka.NewMockPublisher()
 		cfg := CreateTestConfig(mockBob, tempDir)
-		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
+		proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -1272,8 +1528,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 
 	mockKafka2 := kafka.NewMockPublisher()
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2, newTestMetrics())
+	proc2 := processor.NewProcessor(cfg2, storageMgr2, zap.NewNop(), mockKafka2, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)
@@ -1367,8 +1622,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 
 		mockKafka := kafka.NewMockPublisher()
 		cfg := CreateTestConfig(mockBob, tempDir)
-		subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-		proc := processor.NewProcessor(cfg, subs, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
+		proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := startProcessor(ctx, proc)
@@ -1412,8 +1666,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 
 	mockKafka2 := kafka.NewMockPublisher()
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
-	subs := []config.SubscriptionEntry{{SCIndex: 0, LogType: 0}}
-	proc2 := processor.NewProcessor(cfg2, subs, storageMgr2, zap.NewNop(), mockKafka2, newTestMetrics())
+	proc2 := processor.NewProcessor(cfg2, storageMgr2, zap.NewNop(), mockKafka2, newTestMetrics())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := startProcessor(ctx, proc2)

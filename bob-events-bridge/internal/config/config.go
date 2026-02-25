@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/ardanlabs/conf/v3"
 )
@@ -31,7 +29,6 @@ type Config struct {
 type BobConfig struct {
 	WebSocketURL      string `conf:"default:ws://localhost:40420/ws/qubic,help:bob WebSocket URL"`
 	StatusURL         string `conf:"default:http://localhost:40420/status,help:bob status endpoint URL"`
-	LogTypes          string `conf:"default:0 1 2 3 8 13,help:space-separated log types to subscribe to"`
 	OverrideStartTick bool   `conf:"default:false,help:override persisted state and start from StartTick"`
 	StartTick         uint32 `conf:"default:0,help:tick to start syncing from (requires OverrideStartTick)"`
 }
@@ -60,12 +57,6 @@ type MetricsConfig struct {
 	Namespace string `conf:"default:qubic_events_bridge"`
 }
 
-// SubscriptionEntry represents a single subscription
-type SubscriptionEntry struct {
-	SCIndex uint32
-	LogType uint32
-}
-
 // Parse loads configuration from environment variables and CLI flags
 func Parse() (*Config, error) {
 	cfg := Config{
@@ -91,33 +82,4 @@ func Parse() (*Config, error) {
 	log.Printf("main: Config :\n%v\n", out)
 
 	return &cfg, nil
-}
-
-// GetSubscriptions parses the log types string into subscription entries
-func (c *Config) GetSubscriptions() ([]SubscriptionEntry, error) {
-	return ParseLogTypes(c.Bob.LogTypes)
-}
-
-// ParseLogTypes parses a space-separated string of log types
-func ParseLogTypes(s string) ([]SubscriptionEntry, error) {
-	if s == "" {
-		return nil, nil
-	}
-
-	parts := strings.Fields(s)
-	entries := make([]SubscriptionEntry, 0, len(parts))
-
-	for _, part := range parts {
-		logType, err := strconv.ParseUint(part, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("invalid log type %q: %w", part, err)
-		}
-
-		entries = append(entries, SubscriptionEntry{
-			SCIndex: 0, // Always core protocol
-			LogType: uint32(logType),
-		})
-	}
-
-	return entries, nil
 }

@@ -28,13 +28,12 @@ type tickBatch struct {
 
 // Processor handles connecting to bob and processing events
 type Processor struct {
-	cfg           *config.Config
-	subscriptions []config.SubscriptionEntry
-	storage       *storage.Manager
-	logger        *zap.Logger
-	client        *bob.WSClient
-	publisher     kafka.Publisher // nil if Kafka disabled
-	metrics       *metrics.BridgeMetrics
+	cfg       *config.Config
+	storage   *storage.Manager
+	logger    *zap.Logger
+	client    *bob.WSClient
+	publisher kafka.Publisher // nil if Kafka disabled
+	metrics   *metrics.BridgeMetrics
 
 	mu             sync.RWMutex
 	running        bool
@@ -49,14 +48,13 @@ type Processor struct {
 }
 
 // NewProcessor creates a new event processor
-func NewProcessor(cfg *config.Config, subscriptions []config.SubscriptionEntry, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher, metrics *metrics.BridgeMetrics) *Processor {
+func NewProcessor(cfg *config.Config, storage *storage.Manager, logger *zap.Logger, publisher kafka.Publisher, metrics *metrics.BridgeMetrics) *Processor {
 	return &Processor{
-		cfg:           cfg,
-		subscriptions: subscriptions,
-		storage:       storage,
-		logger:        logger,
-		publisher:     publisher,
-		metrics:       metrics,
+		cfg:       cfg,
+		storage:   storage,
+		logger:    logger,
+		publisher: publisher,
+		metrics:   metrics,
 	}
 }
 
@@ -184,22 +182,13 @@ func (p *Processor) connectAndProcess(ctx context.Context) error {
 		p.metrics.SetCurrentEpoch(status.CurrentProcessingEpoch)
 	}
 
-	// Build logFilters from subscription config
-	logFilters := make([]bob.LogFilter, len(p.subscriptions))
-	for i, sub := range p.subscriptions {
-		logFilters[i] = bob.LogFilter{
-			SCIndex: sub.SCIndex,
-			LogType: sub.LogType,
-		}
-	}
-
 	// Subscribe with startTick for crash recovery
 	startTick := p.lastTick
 	if startTick > 0 {
 		startTick++ // tickStream startTick is inclusive, we want the next tick
 	}
 
-	subscriptionID, err := p.client.Subscribe(logFilters, startTick)
+	subscriptionID, err := p.client.Subscribe(startTick)
 	if err != nil {
 		_ = p.client.Close()
 		return fmt.Errorf("failed to subscribe: %w", err)
@@ -361,10 +350,9 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		}
 
 		// Build kafka message (if publisher configured)
-		// scIndex is 0 for core protocol events (all our current subscriptions)
 		var kafkaMsg *kafka.EventMessage
 		if p.publisher != nil {
-			kafkaMsg, err = kafka.BuildEventMessage(0, &payload, parsed, p.tickEventIndex)
+			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex)
 			if err != nil {
 				return fmt.Errorf("failed to build kafka message: %w", err)
 			}
