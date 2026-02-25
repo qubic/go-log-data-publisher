@@ -109,8 +109,8 @@ type CustomMessageBody struct {
 }
 
 // ParseEventBody unmarshals the raw body JSON into the typed struct for the
-// given log type. Returns the typed struct as interface{}. Returns an error if
-// the log type is unknown or the body is malformed.
+// given log type. Returns the typed struct as interface{}. Unknown log types
+// are parsed as a generic map[string]any so they pass through without error.
 func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 	if len(body) == 0 {
 		return nil, nil
@@ -139,7 +139,12 @@ func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 	case LogTypeCustomMessage:
 		target = &CustomMessageBody{}
 	default:
-		return nil, fmt.Errorf("unknown log type: %d", logType)
+		// Unknown log type — pass through the raw body as a generic map
+		var m map[string]interface{}
+		if err := json.Unmarshal(body, &m); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal body for unknown log type %d: %w", logType, err)
+		}
+		return m, nil
 	}
 
 	if err := json.Unmarshal(body, target); err != nil {

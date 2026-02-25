@@ -1380,6 +1380,25 @@ func TestE2E_LogType255_CustomMessage(t *testing.T) {
 	})
 }
 
+func TestE2E_UnknownLogType_Passthrough(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "unknown_log_type_14",
+		eventType: 14,
+		bobBody: map[string]any{
+			"someField":    "someValue",
+			"anotherField": 42,
+		},
+		grpcChecks: map[string]any{
+			"someField":    "someValue",
+			"anotherField": float64(42),
+		},
+		kafkaChecks: map[string]any{
+			"someField":    "someValue",
+			"anotherField": float64(42),
+		},
+	})
+}
+
 // TestE2E_KafkaPublishFailure tests that processor disconnects and retries on Kafka failure
 func TestE2E_KafkaPublishFailure(t *testing.T) {
 	mockBob := NewMockBobServer(145, 22000000)

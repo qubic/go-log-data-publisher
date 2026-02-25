@@ -201,6 +201,24 @@ func TestTransformEventBody_CustomMessage(t *testing.T) {
 	}
 }
 
+func TestTransformEventBody_UnknownLogTypePassthrough(t *testing.T) {
+	body := map[string]any{
+		"foo": "bar",
+		"num": float64(42),
+	}
+
+	result, err := TransformEventBody(999, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"foo": "bar",
+		"num": float64(42),
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTransformEventBody_UnsupportedType(t *testing.T) {
 	body := struct{ Foo string }{Foo: "bar"}
 	_, err := TransformEventBody(99, &body)

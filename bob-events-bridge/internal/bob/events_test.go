@@ -179,9 +179,11 @@ func TestParseEventBody_UnknownLogType(t *testing.T) {
 	body := json.RawMessage(`{"foo": "bar"}`)
 
 	result, err := ParseEventBody(999, body)
-	assert.Nil(t, result)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown log type: 999")
+	require.NoError(t, err)
+
+	parsed, ok := result.(map[string]interface{})
+	require.True(t, ok, "unknown log type should return map[string]interface{}")
+	assert.Equal(t, "bar", parsed["foo"])
 }
 
 func TestParseEventBody_MalformedBody(t *testing.T) {
