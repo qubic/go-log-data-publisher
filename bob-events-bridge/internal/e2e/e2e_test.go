@@ -1623,6 +1623,87 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 	require.True(t, indexValues[1], "tickNew should have event with IndexInTick=1")
 }
 
+// TestE2E_NotificationsBeforeSubscribeResponse tests that the processor handles
+// tickStream notifications arriving before the subscribe JSON-RPC response.
+// This simulates bob's behavior of starting catch-up before sending the response.
+func TestE2E_NotificationsBeforeSubscribeResponse(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	// Configure mock to send 2 notifications BEFORE the subscribe response
+	mockBob.SetSendNotificationsBeforeResponse([]bob.TickStreamResult{
+		{
+			Epoch:        145,
+			Tick:         22000001,
+			IsCatchUp:    true,
+			TotalLogs:    1,
+			FilteredLogs: 1,
+			Logs: []bob.LogPayload{
+				CreateLogPayload(145, 22000001, 1, 0, map[string]any{
+					"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+					"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+					"amount": 100,
+				}),
+			},
+		},
+		{
+			Epoch:        145,
+			Tick:         22000002,
+			IsCatchUp:    true,
+			TotalLogs:    1,
+			FilteredLogs: 1,
+			Logs: []bob.LogPayload{
+				CreateLogPayload(145, 22000002, 2, 0, map[string]any{
+					"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+					"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+					"amount": 200,
+				}),
+			},
+		},
+	})
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	cfg := CreateTestConfig(mockBob, tempDir)
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	// Processor should still subscribe successfully despite early notifications
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	// Send catchUpComplete so the batch is flushed
+	mockBob.SendCatchUpComplete()
+
+	// Verify the early notifications were processed (events stored)
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		exists1, _ := storageMgr.HasEvent(145, 22000001, 1)
+		exists2, _ := storageMgr.HasEvent(145, 22000002, 2)
+		return exists1 && exists2
+	}, "both early notification events should be stored")
+
+	// Verify via gRPC
+	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
+	resp1, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: 22000001})
+	require.NoError(t, err)
+	require.Len(t, resp1.Events, 1)
+	require.Equal(t, uint64(1), resp1.Events[0].LogId)
+
+	resp2, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: 22000002})
+	require.NoError(t, err)
+	require.Len(t, resp2.Events, 1)
+	require.Equal(t, uint64(2), resp2.Events[0].LogId)
+}
+
 // TestE2E_KafkaDeduplication tests that deduplicated events are NOT published to Kafka
 func TestE2E_KafkaDeduplication(t *testing.T) {
 	tempDir := t.TempDir()

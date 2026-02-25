@@ -20,11 +20,12 @@ type MockBobServer struct {
 	initialTick         uint32
 	upgrader            websocket.Upgrader
 
-	mu             sync.Mutex
-	conn           *websocket.Conn
-	subscriptionCh chan bob.TickStreamSubscribeParams // Receives subscribe params from client
-	messagesToSend chan []byte                        // Queue of messages to send to client
-	closed         bool
+	mu                         sync.Mutex
+	conn                       *websocket.Conn
+	subscriptionCh             chan bob.TickStreamSubscribeParams // Receives subscribe params from client
+	messagesToSend             chan []byte                        // Queue of messages to send to client
+	closed                     bool
+	preResponseNotifications   []bob.TickStreamResult // notifications to send before subscribe response
 }
 
 // NewMockBobServer creates a new mock bob server
@@ -144,6 +145,29 @@ func (m *MockBobServer) handleSubscribe(conn *websocket.Conn, req bob.JsonRpcReq
 	// Use a deterministic subscription ID for testing
 	subID := "test-subscription-id"
 
+	// Send pre-response notifications if configured (simulates bob's catch-up race)
+	m.mu.Lock()
+	preNotifs := m.preResponseNotifications
+	m.preResponseNotifications = nil // consume them
+	m.mu.Unlock()
+
+	for _, result := range preNotifs {
+		resultJSON, _ := json.Marshal(result)
+		notification := bob.JsonRpcNotification{
+			JsonRpc: "2.0",
+			Method:  "qubic_subscription",
+			Params: bob.SubscriptionParams{
+				Subscription: subID,
+				Result:       resultJSON,
+			},
+		}
+		m.mu.Lock()
+		if m.conn != nil {
+			_ = m.conn.WriteJSON(notification)
+		}
+		m.mu.Unlock()
+	}
+
 	// Send JSON-RPC response with subscription ID
 	resp := bob.JsonRpcResponse{
 		JsonRpc: "2.0",
@@ -163,6 +187,15 @@ func (m *MockBobServer) handleSubscribe(conn *websocket.Conn, req bob.JsonRpcReq
 	case m.subscriptionCh <- subscribeParams:
 	default:
 	}
+}
+
+// SetSendNotificationsBeforeResponse queues notifications to be sent before the
+// next subscribe response. This simulates bob's behavior of starting tickStream
+// catch-up before sending the JSON-RPC response.
+func (m *MockBobServer) SetSendNotificationsBeforeResponse(notifications []bob.TickStreamResult) {
+	m.mu.Lock()
+	m.preResponseNotifications = notifications
+	m.mu.Unlock()
 }
 
 // sendJsonRpcError sends a JSON-RPC error response
