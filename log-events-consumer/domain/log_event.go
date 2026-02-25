@@ -26,24 +26,23 @@ var sysTransactionMap = map[string]uint8{
 // Some data types are a bit oversized but correspond with the elastic template.
 // We do not care about the source data types but the target data types here.
 type LogEvent struct {
-	Epoch                 uint32         `json:"epoch"`
-	TickNumber            uint64         `json:"tickNumber"`
-	Index                 uint64         `json:"index"`
-	Type                  int16          `json:"type"`
-	EmittingContractIndex uint64         `json:"emittingContractIndex"`
-	LogId                 uint64         `json:"logId"`
-	LogDigest             string         `json:"logDigest"` // hex
-	TransactionHash       string         `json:"transactionHash"`
-	Timestamp             uint64         `json:"timestamp"`
-	BodySize              uint32         `json:"bodySize"`
-	Body                  map[string]any `json:"body"`
+	Epoch           uint32         `json:"epoch"`
+	TickNumber      uint64         `json:"tickNumber"`
+	Index           uint64         `json:"index"`
+	Type            int16          `json:"type"`
+	LogId           uint64         `json:"logId"`
+	LogDigest       string         `json:"logDigest"` // hex
+	TransactionHash string         `json:"transactionHash"`
+	Timestamp       uint64         `json:"timestamp"`
+	BodySize        uint32         `json:"bodySize"`
+	Body            map[string]any `json:"body"`
 }
 
 func (le *LogEvent) IsSupported(supportedMap map[uint64][]int16) bool {
 	if supportedMap == nil {
 		return false
 	}
-	logTypes, ok := supportedMap[le.EmittingContractIndex]
+	logTypes, ok := supportedMap[0] // check for main event type only here
 	if !ok {
 		return false
 	}
@@ -53,14 +52,13 @@ func (le *LogEvent) IsSupported(supportedMap map[uint64][]int16) bool {
 func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 
 	lee := LogEventElastic{
-		Epoch:                 le.Epoch,
-		TickNumber:            le.TickNumber,
-		Timestamp:             le.Timestamp,
-		EmittingContractIndex: le.EmittingContractIndex,
-		TransactionHash:       le.TransactionHash,
-		LogId:                 le.LogId,
-		LogDigest:             le.LogDigest,
-		Type:                  le.Type,
+		Epoch:           le.Epoch,
+		TickNumber:      le.TickNumber,
+		Timestamp:       le.Timestamp,
+		TransactionHash: le.TransactionHash,
+		LogId:           le.LogId,
+		LogDigest:       le.LogDigest,
+		Type:            le.Type,
 	}
 
 	// checking here again might be a bit paranoid

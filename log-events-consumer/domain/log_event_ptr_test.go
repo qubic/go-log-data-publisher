@@ -25,8 +25,7 @@ func TestLogEventPtr_ToLogEvent_Validation(t *testing.T) {
 				"timestamp": 123456789,
 				"logDigest": "digest",
 				"index": 1,
-				"type": 0,
-				"emittingContractIndex": 5
+				"type": 0
 			}`,
 			expectError: false,
 		},
@@ -39,8 +38,7 @@ func TestLogEventPtr_ToLogEvent_Validation(t *testing.T) {
 				"logDigest": "digest",
 				"transactionHash": "hash",
 				"index": 1,
-				"type": 0,
-				"emittingContractIndex": 5
+				"type": 0
 			}`,
 			expectError:   true,
 			errorContains: "epoch",
@@ -64,8 +62,7 @@ func TestLogEventPtr_ToLogEvent_Validation(t *testing.T) {
 				"timestamp": 123456789,
 				"logDigest": "digest",
 				"index": 1,
-				"type": 0,
-				"emittingContractIndex": 5
+				"type": 0
 			}`,
 			expectError: false,
 		},
@@ -77,8 +74,7 @@ func TestLogEventPtr_ToLogEvent_Validation(t *testing.T) {
 				"logId": 123,
 				"timestamp": 123456789,
 				"index": 1,
-				"type": 0,
-				"emittingContractIndex": 5
+				"type": 0
 			}`,
 			expectError:   true,
 			errorContains: "logDigest",
@@ -125,7 +121,6 @@ func TestLogEventPtr_ToLogEvent_OptionalFields(t *testing.T) {
 		"transactionHash": "hash",
 		"index": 1,
 		"type": 0,
-		"emittingContractIndex": 5,
 		"bodySize": 10,
 		"body": {"foo": "bar"}
 	}`
@@ -157,8 +152,7 @@ func TestLogEventPtr_ToLogEvent_InvalidZeroFields(t *testing.T) {
 				"timestamp": 0,
 				"logDigest": "",
 				"index": 0,
-				"type": 0,
-				"emittingContractIndex": 0
+				"type": 0
 			}`
 
 	var lep LogEventPtr

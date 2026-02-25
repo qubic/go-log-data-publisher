@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/qubic/log-events-consumer/domain"
@@ -52,7 +51,6 @@ func TestConsumeBatch_Success(t *testing.T) {
 		"tickNumber": 1000,
 		"index": 1,
 		"type": 0,
-		"emittingContractIndex": 0,
 		"logId": 12345,
 		"logDigest": "test-digest",
 		"transactionHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
@@ -479,16 +477,15 @@ func TestConsume_ContextCancellation(t *testing.T) {
 
 func TestUnmarshallLogEvent_Success(t *testing.T) {
 	logEvent := domain.LogEvent{
-		Epoch:                 100,
-		TickNumber:            1000,
-		Index:                 1,
-		Type:                  1,
-		EmittingContractIndex: 5,
-		LogId:                 12345,
-		LogDigest:             "test-digest",
-		TransactionHash:       "tx-hash",
-		Timestamp:             1704067200,
-		BodySize:              100,
+		Epoch:           100,
+		TickNumber:      1000,
+		Index:           1,
+		Type:            1,
+		LogId:           12345,
+		LogDigest:       "test-digest",
+		TransactionHash: "tx-hash",
+		Timestamp:       1704067200,
+		BodySize:        100,
 		Body: map[string]any{
 			"source": "SOURCE_ADDRESS",
 		},
@@ -600,7 +597,7 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 					"destination":            "DESTINATION",
 					"assetName":              "ASSET_NAME",
 					"assetIssuer":            "ASSET_ISSUER",
-					"amount":                 float64(100),
+					"amount":                 float64(100), // needed for type 0 and 8
 					"numberOfShares":         float64(101),
 					"managingContractIndex":  float64(102),
 					"numberOfDecimalPlaces":  float64(103),
@@ -676,14 +673,13 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 	// Create events that should be filtered (Type=0, ContractIndex=0, Amount=0)
 	logEvent := domain.LogEvent{
-		Epoch:                 100,
-		TickNumber:            1000,
-		Type:                  0,
-		EmittingContractIndex: 0,
-		LogId:                 12345,
-		LogDigest:             "test-digest",
-		TransactionHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
-		Timestamp:             1704067200,
+		Epoch:           100,
+		TickNumber:      1000,
+		Type:            0,
+		LogId:           12345,
+		LogDigest:       "test-digest",
+		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
+		Timestamp:       1704067200,
 		Body: map[string]any{
 			"source":      "SOURCE",
 			"destination": "DESTINATION",
@@ -740,111 +736,6 @@ func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 
 	if len(indexedDocs) != 0 {
 		t.Errorf("Expected 0 documents indexed (filtered), got: %d", len(indexedDocs))
-	}
-}
-
-func TestConsumeBatch_FilterEdgeCases(t *testing.T) {
-	tests := []struct {
-		name                  string
-		typ                   int16
-		emittingContractIndex uint64
-		amount                uint64
-		shouldFilter          bool
-	}{
-		{
-			name:                  "Amount non-zero, should not filter",
-			typ:                   0,
-			emittingContractIndex: 0,
-			amount:                100,
-			shouldFilter:          false,
-		},
-		{
-			name:                  "All zero, should filter",
-			typ:                   0,
-			emittingContractIndex: 0,
-			amount:                0,
-			shouldFilter:          true,
-		},
-	}
-
-	for i, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			body := map[string]any{
-				"source":      "SOURCE",
-				"destination": "DESTINATION",
-			}
-			body["amount"] = float64(tt.amount)
-
-			logEvent := domain.LogEvent{
-				Epoch:                 100,
-				TickNumber:            1000,
-				EmittingContractIndex: tt.emittingContractIndex,
-				Type:                  tt.typ,
-				LogId:                 12345,
-				LogDigest:             "test-digest",
-				TransactionHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaafxib",
-				Timestamp:             1704067200,
-				Body:                  body,
-			}
-
-			logEventJSON, _ := json.Marshal(logEvent)
-
-			mockKafka := &mockKafkaClient{
-				pollRecordsFunc: func(ctx context.Context, maxPollRecords int) kgo.Fetches {
-					record := &kgo.Record{
-						Value: logEventJSON,
-					}
-					return kgo.Fetches{
-						{
-							Topics: []kgo.FetchTopic{
-								{
-									Topic: "test-topic",
-									Partitions: []kgo.FetchPartition{
-										{
-											Partition: 0,
-											Records:   []*kgo.Record{record},
-										},
-									},
-								},
-							},
-						},
-					}
-				},
-			}
-
-			var indexedDocs []*elastic.EsDocument
-			mockElastic := &mockElasticClient{
-				bulkIndexFunc: func(ctx context.Context, data []*elastic.EsDocument) error {
-					indexedDocs = data
-					return nil
-				},
-			}
-
-			m := metrics.NewMetrics(fmt.Sprintf("test_filter_edge_%d", i))
-			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
-
-			count, err := consumer.consumeBatch(context.Background())
-
-			if err != nil {
-				t.Fatalf("Expected no error, got: %v", err)
-			}
-
-			if tt.shouldFilter {
-				if count != 0 {
-					t.Errorf("Expected count 0 (filtered), got: %d", count)
-				}
-				if len(indexedDocs) != 0 {
-					t.Errorf("Expected 0 documents (filtered), got: %d", len(indexedDocs))
-				}
-			} else {
-				if count != 1 {
-					t.Errorf("Expected count 1 (not filtered), got: %d", count)
-				}
-				if len(indexedDocs) != 1 {
-					t.Errorf("Expected 1 document (not filtered), got: %d", len(indexedDocs))
-				}
-			}
-		})
 	}
 }
 

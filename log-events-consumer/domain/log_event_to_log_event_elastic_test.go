@@ -57,14 +57,13 @@ func TestLogEvent_ToLogEventElastic_SpecialSystemTransactions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logEvent := LogEvent{
-				Epoch:                 100,
-				TickNumber:            200,
-				Type:                  0,
-				EmittingContractIndex: 0,
-				LogId:                 400,
-				LogDigest:             "abcd1234",
-				TransactionHash:       tt.transactionHash,
-				Timestamp:             1234567890,
+				Epoch:           100,
+				TickNumber:      200,
+				Type:            0,
+				LogId:           400,
+				LogDigest:       "abcd1234",
+				TransactionHash: tt.transactionHash,
+				Timestamp:       1234567890,
 				Body: map[string]any{
 					"source":      "TEST",
 					"destination": "TEST",
@@ -114,14 +113,13 @@ func TestLogEvent_ToLogEventElastic_SpecialTransactionJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logEvent := LogEvent{
-				Epoch:                 100,
-				TickNumber:            200,
-				Type:                  0,
-				EmittingContractIndex: 0,
-				LogId:                 400,
-				LogDigest:             "abcd1234",
-				TransactionHash:       tt.transactionHash,
-				Timestamp:             1234567890,
+				Epoch:           100,
+				TickNumber:      200,
+				Type:            0,
+				LogId:           400,
+				LogDigest:       "abcd1234",
+				TransactionHash: tt.transactionHash,
+				Timestamp:       1234567890,
 				Body: map[string]any{
 					"source":      "TEST",
 					"destination": "TEST",
@@ -234,14 +232,13 @@ func TestLogEvent_ToLogEventElastic_MalformedSpecialTransaction(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_QuTransfer_Success(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  0,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            0,
 		Body: map[string]any{
 			"source":      "source-identity",
 			"destination": "dest-identity",
@@ -259,14 +256,13 @@ func TestLogEvent_ToLogEventElastic_QuTransfer_Success(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_QuTransfer_Error(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  0,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            0,
 		Body: map[string]any{
 			"destination": "dest-identity",
 			"amount":      1000.0,
@@ -280,14 +276,13 @@ func TestLogEvent_ToLogEventElastic_QuTransfer_Error(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_AssetIssuance_Success(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  1,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            1,
 		Body: map[string]any{
 			"assetIssuer":           "issuer-identity",
 			"assetName":             "QUBIC",
@@ -311,14 +306,13 @@ func TestLogEvent_ToLogEventElastic_AssetIssuance_Success(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_AssetIssuance_Error(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  1,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            1,
 		Body: map[string]any{
 			"assetName":             "QUBIC",
 			"managingContractIndex": 10.0,
@@ -335,14 +329,13 @@ func TestLogEvent_ToLogEventElastic_AssetIssuance_Error(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_AssetTransfer_Success(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  2,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            2,
 		Body: map[string]any{
 			"assetIssuer":    "issuer-identity",
 			"assetName":      "ASSET",
@@ -364,14 +357,13 @@ func TestLogEvent_ToLogEventElastic_AssetTransfer_Success(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_AssetTransfer_Error(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  2,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            2,
 		Body: map[string]any{
 			"assetIssuer": "issuer-identity",
 			"assetName":   "ASSET",
@@ -388,14 +380,13 @@ func TestLogEvent_ToLogEventElastic_AssetTransfer_Error(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_Burn_Success(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  8,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            8,
 		Body: map[string]any{
 			"source":                 "source-identity",
 			"amount":                 100.0,
@@ -413,14 +404,13 @@ func TestLogEvent_ToLogEventElastic_Burn_Success(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_Burn_Error(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  8,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            8,
 		Body: map[string]any{
 			"source": "source-identity",
 			"amount": 100.0,
@@ -435,14 +425,13 @@ func TestLogEvent_ToLogEventElastic_Burn_Error(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_ReserveDeduction_Success(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  13,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            13,
 		Body: map[string]any{
 			"contractIndex":   1.0,
 			"deductedAmount":  50.0,
@@ -460,14 +449,13 @@ func TestLogEvent_ToLogEventElastic_ReserveDeduction_Success(t *testing.T) {
 
 func TestLogEvent_ToLogEventElastic_ReserveDeduction_Error(t *testing.T) {
 	le := LogEvent{
-		Epoch:                 100,
-		TickNumber:            200,
-		Timestamp:             1234567890,
-		EmittingContractIndex: 0,
-		TransactionHash:       validTxHash,
-		LogId:                 300,
-		LogDigest:             "digest",
-		Type:                  13,
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            13,
 		Body: map[string]any{
 			"contractIndex":  1.0,
 			"deductedAmount": 50.0,

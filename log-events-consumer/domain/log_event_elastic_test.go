@@ -52,13 +52,12 @@ func TestLogEventElastic_IsSupported(t *testing.T) {
 func TestLogEventElastic_Omitempty(t *testing.T) {
 	// Initialize with only required fields (no omitempty fields)
 	lee := LogEventElastic{
-		Epoch:                 1,
-		TickNumber:            2,
-		Timestamp:             3,
-		EmittingContractIndex: 0,
-		LogId:                 4,
-		LogDigest:             "digest",
-		Type:                  1,
+		Epoch:      1,
+		TickNumber: 2,
+		Timestamp:  3,
+		LogId:      4,
+		LogDigest:  "digest",
+		Type:       1,
 	}
 
 	data, err := json.Marshal(lee)
@@ -86,6 +85,7 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 		"remainingAmount",
 		"contractIndex",
 		"contractIndexBurnedFor",
+		"emittingContractIndex",
 	}
 
 	for _, field := range omitemptyFields {
@@ -104,6 +104,7 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 	remaining := int64(80)
 	contractIdx := uint64(30)
 	burnedFor := uint64(40)
+	emittingContractIndex := uint64(1)
 
 	lee.TransactionHash = "some-tx-hash"
 	lee.Category = &cat
@@ -120,6 +121,7 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 	lee.RemainingAmount = &remaining
 	lee.ContractIndex = &contractIdx
 	lee.ContractIndexBurnedFor = &burnedFor
+	lee.EmittingContractIndex = &emittingContractIndex
 
 	data, err = json.Marshal(lee)
 	if err != nil {

@@ -6,17 +6,16 @@ import (
 
 // LogEventPtr mirrors LogEvent but uses pointers for all fields to detect presence during JSON unmarshalling.
 type LogEventPtr struct {
-	Epoch                 *uint32         `json:"epoch"`
-	TickNumber            *uint64         `json:"tickNumber"`
-	Index                 *uint64         `json:"index"`
-	Type                  *int16          `json:"type"`
-	EmittingContractIndex *uint64         `json:"emittingContractIndex"`
-	LogId                 *uint64         `json:"logId"`
-	LogDigest             *string         `json:"logDigest"`
-	TransactionHash       *string         `json:"transactionHash"`
-	Timestamp             *uint64         `json:"timestamp"`
-	BodySize              *uint32         `json:"bodySize"`
-	Body                  *map[string]any `json:"body"`
+	Epoch           *uint32         `json:"epoch"`
+	TickNumber      *uint64         `json:"tickNumber"`
+	Index           *uint64         `json:"index"`
+	Type            *int16          `json:"type"`
+	LogId           *uint64         `json:"logId"`
+	LogDigest       *string         `json:"logDigest"`
+	TransactionHash *string         `json:"transactionHash"`
+	Timestamp       *uint64         `json:"timestamp"`
+	BodySize        *uint32         `json:"bodySize"`
+	Body            *map[string]any `json:"body"`
 }
 
 // ToLogEvent converts the pointer-based LogEventPtr into a concrete LogEvent.
@@ -43,9 +42,6 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 	}
 	if lep.Type == nil {
 		missing = append(missing, "type")
-	}
-	if lep.EmittingContractIndex == nil {
-		missing = append(missing, "emittingContractIndex")
 	}
 
 	if len(missing) > 0 {
@@ -88,16 +84,15 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 	}
 
 	return LogEvent{
-		Epoch:                 *lep.Epoch,
-		TickNumber:            *lep.TickNumber,
-		Index:                 *lep.Index,
-		Type:                  *lep.Type,
-		EmittingContractIndex: *lep.EmittingContractIndex,
-		LogId:                 *lep.LogId,
-		LogDigest:             *lep.LogDigest,
-		TransactionHash:       hash,
-		Timestamp:             *lep.Timestamp,
-		BodySize:              bodySize,
-		Body:                  body,
+		Epoch:           *lep.Epoch,
+		TickNumber:      *lep.TickNumber,
+		Index:           *lep.Index,
+		Type:            *lep.Type,
+		LogId:           *lep.LogId,
+		LogDigest:       *lep.LogDigest,
+		TransactionHash: hash,
+		Timestamp:       *lep.Timestamp,
+		BodySize:        bodySize,
+		Body:            body,
 	}, nil
 }

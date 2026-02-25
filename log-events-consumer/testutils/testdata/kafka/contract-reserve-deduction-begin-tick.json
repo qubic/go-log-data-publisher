@@ -3,7 +3,6 @@
   "tickNumber": 43828461,
   "index": 1,
   "type": 13,
-  "emittingContractIndex": 0,
   "logId": 7232952,
   "logDigest": "8167c3441c5dd94c",
   "transactionHash": "SC_BEGIN_TICK_TX_43828461",
