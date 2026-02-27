@@ -1,0 +1,12 @@
+{
+  "epoch": 202,
+  "tickNumber": 44825376,
+  "timestamp": 1772210252,
+  "type": 6,
+  "logId": 3071190,
+  "logDigest": "33928ec5a1ec0bf4",
+  "transactionHash": "lwehntxvvscunbbiimrcddzoapcaewgaetdrkenludlhpsulyobbrulfibsj",
+  "emittingContractIndex": 1,
+  "contractMessageType": 0,
+  "rawPayload": "OGN96Itm1E9T0dLgUJ9tWZOTrTqG3cUp/28sFmW6wENRU0lMVkVSAOAPlwAAAAAAAQAAAAAAAAA="
+}

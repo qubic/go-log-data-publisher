@@ -561,6 +561,11 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 			shouldFilter: false,
 		},
 		{
+			name:         "Type 6 is supported",
+			eventType:    6,
+			shouldFilter: false,
+		},
+		{
 			name:         "Type 8 is supported",
 			eventType:    8,
 			shouldFilter: false,
@@ -571,8 +576,13 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 			shouldFilter: false,
 		},
 		{
-			name:         "Type 4 is NOT supported",
-			eventType:    4,
+			name:         "Type 255 is supported",
+			eventType:    255,
+			shouldFilter: false,
+		},
+		{
+			name:         "Type 7 is NOT supported",
+			eventType:    7,
 			shouldFilter: true,
 		},
 		{
@@ -606,6 +616,10 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 					"contractIndex":          float64(105),
 					"deductedAmount":         float64(106),
 					"remainingAmount":        float64(107),
+					"scIndex":                float64(108),
+					"scLogType":              float64(109),
+					"content":                "0000",
+					"customMessage":          "12345",
 				},
 				Index: 1,
 			}
@@ -644,7 +658,7 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics("test_supported_filter_" + tt.name)
-			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 13, 255}})
 
 			count, err := consumer.consumeBatch(context.Background())
 			if err != nil {

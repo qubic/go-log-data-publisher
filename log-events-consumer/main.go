@@ -63,7 +63,7 @@ func run() error {
 
 	// Parsing of the default value didn't work properly. We manually set the default.
 	if cfg.Base.SupportedLogTypes == "" {
-		cfg.Base.SupportedLogTypes = `{"0":[0,1,2,3,8,13]}`
+		cfg.Base.SupportedLogTypes = `{"0":[0,1,2,3,4,5,6,8,13,255]}` // 7 not stored by default (debug message)
 	}
 	supportedTypes := parseSupportedTypes(cfg.Base.SupportedLogTypes)
 

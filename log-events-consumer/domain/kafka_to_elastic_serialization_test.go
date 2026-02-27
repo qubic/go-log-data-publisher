@@ -45,6 +45,18 @@ func TestLogEvent_Integration(t *testing.T) {
 			filename: "testdata/kafka/asset-issuance.json",
 			expected: "testdata/elastic/asset-issuance.json",
 		},
+		{
+			filename: "testdata/kafka/contract-information-message.json",
+			expected: "testdata/elastic/contract-information-message.json",
+		},
+		{
+			filename: "testdata/kafka/custom-message-start-dividends.json",
+			expected: "testdata/elastic/custom-message-start-dividends.json",
+		},
+		{
+			filename: "testdata/kafka/custom-message-end-dividends.json",
+			expected: "testdata/elastic/custom-message-end-dividends.json",
+		},
 	}
 
 	for _, tt := range tests {

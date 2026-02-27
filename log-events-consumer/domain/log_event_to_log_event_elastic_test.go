@@ -61,7 +61,7 @@ func TestLogEvent_ToLogEventElastic_SpecialSystemTransactions(t *testing.T) {
 				TickNumber:      200,
 				Type:            0,
 				LogId:           400,
-				LogDigest:       "abcd1234",
+				LogDigest:       "abc1234",
 				TransactionHash: tt.transactionHash,
 				Timestamp:       1234567890,
 				Body: map[string]any{
@@ -76,12 +76,12 @@ func TestLogEvent_ToLogEventElastic_SpecialSystemTransactions(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Verify category is set correctly
-			if result.Category == nil {
-				t.Fatalf("expected Category to be set, got nil")
+			// Verify categories are set correctly
+			if result.Categories == nil || len(result.Categories) == 0 {
+				t.Fatalf("expected Categories to be set, got nil or empty")
 			}
-			if *result.Category != tt.expectedCategory {
-				t.Errorf("expected Category=%d, got %d", tt.expectedCategory, *result.Category)
+			if result.Categories[0] != tt.expectedCategory {
+				t.Errorf("expected Categories[0]=%d, got %d", tt.expectedCategory, result.Categories[0])
 			}
 
 			// Verify transaction hash is cleared
@@ -117,7 +117,7 @@ func TestLogEvent_ToLogEventElastic_SpecialTransactionJSON(t *testing.T) {
 				TickNumber:      200,
 				Type:            0,
 				LogId:           400,
-				LogDigest:       "abcd1234",
+				LogDigest:       "abc1234",
 				TransactionHash: tt.transactionHash,
 				Timestamp:       1234567890,
 				Body: map[string]any{
@@ -145,16 +145,20 @@ func TestLogEvent_ToLogEventElastic_SpecialTransactionJSON(t *testing.T) {
 				t.Fatalf("failed to unmarshal JSON: %v", err)
 			}
 
-			// Verify category is present in JSON (even if 0)
-			categoryValue, exists := jsonMap["category"]
+			// Verify categories is present in JSON
+			categoriesValue, exists := jsonMap["categories"]
 			if !exists {
-				t.Errorf("expected 'category' to be present in JSON, but it was missing")
+				t.Errorf("expected 'categories' to be present in JSON, but it was missing")
 			} else {
-				// JSON numbers are float64
-				if categoryFloat, ok := categoryValue.(float64); !ok {
-					t.Errorf("expected category to be a number, got %T", categoryValue)
+				// JSON arrays are []interface{}
+				if categoriesArray, ok := categoriesValue.([]interface{}); !ok {
+					t.Errorf("expected categories to be an array, got %T", categoriesValue)
+				} else if len(categoriesArray) == 0 {
+					t.Errorf("expected categories array to have at least one element")
+				} else if categoryFloat, ok := categoriesArray[0].(float64); !ok {
+					t.Errorf("expected categories[0] to be a number, got %T", categoriesArray[0])
 				} else if byte(categoryFloat) != tt.expectedCategory {
-					t.Errorf("expected category=%d in JSON, got %f", tt.expectedCategory, categoryFloat)
+					t.Errorf("expected categories[0]=%d in JSON, got %f", tt.expectedCategory, categoryFloat)
 				}
 			}
 

@@ -1,0 +1,14 @@
+{
+  "index": 141,
+  "type": 255,
+  "tickNumber": 44830477,
+  "epoch": 202,
+  "logDigest": "7c052f465eabd6db",
+  "logId": 3181519,
+  "bodySize": 8,
+  "timestamp": 1772216069,
+  "transactionHash": "SC_END_TICK_TX_44830477",
+  "body": {
+    "customMessage": "6217575821008457285"
+  }
+}
