@@ -3,7 +3,7 @@ name: Create log events consumer image (branch)
 on:
   push:
     branches:
-      - 'log-events-consumer'
+      - 'feature/add-all-base-log-types'
     paths:
       - 'log-events-consumer/**'
       - '.github/workflows/push-docker-log-events-consumer-branch.yml'
@@ -59,4 +59,4 @@ jobs:
           context: ./log-events-consumer
           file: ./log-events-consumer/Dockerfile
           push: true
-          tags: ghcr.io/qubic/log-events-consumer:${{ steps.extract.outputs.branch }}
+          tags: ghcr.io/qubic/log-events-consumer:snapshot
