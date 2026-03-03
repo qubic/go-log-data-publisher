@@ -94,50 +94,50 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		lee.Categories = Categories{category}
 	}
 
-	switch {
-	case lee.Type == 0:
+	switch lee.Type {
+	case 0:
 		err = handleQuTransfer(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling qu transfer: %w", err)
 		}
 
-	case lee.Type == 1:
+	case 1:
 		err = handleAssetIssuance(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling asset issuance: %w", err)
 		}
 
-	case lee.Type == 2, lee.Type == 3:
+	case 2, 3:
 		err = handleAssetTransfer(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling asset transfer: %w", err)
 		}
 
-	case lee.Type == 4, lee.Type == 5, lee.Type == 6, lee.Type == 7:
+	case 4, 5, 6, 7:
 		err = handleSmartContractMessage(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling smart contract message with type [%d]: %w", lee.Type, err)
 		}
 
-	case lee.Type == 8:
+	case 8:
 		err = handleBurn(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling burn: %w", err)
 		}
 
-	case lee.Type == 9, lee.Type == 10, lee.Type == 11, lee.Type == 12: // raw payload only
+	case 9, 10, 11, 12: // raw payload only
 		err = handleRaw(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling raw event with type [%d]: %w", lee.Type, err)
 		}
 
-	case lee.Type == 13:
+	case 13:
 		err = handleReserveDeduction(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling reserve deduction: %w", err)
 		}
 
-	case lee.Type == 255:
+	case 255:
 		err = handleCustomMessage(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling custom message: %w", err)
