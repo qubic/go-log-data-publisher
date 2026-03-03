@@ -471,3 +471,38 @@ func TestLogEvent_ToLogEventElastic_ReserveDeduction_Error(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing or invalid remaining amount")
 }
+
+func TestLogEvent_ToLogEventElastic_CustomMessage_Success(t *testing.T) {
+	le := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Timestamp:  1234567890,
+		LogId:      300,
+		LogDigest:  "digest",
+		Type:       255,
+		Body: map[string]any{
+			"customMessage": "1234567890",
+		},
+	}
+
+	lee, err := le.ToLogEventElastic()
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(1234567890), *lee.CustomMessage)
+}
+
+func TestLogEvent_ToLogEventElastic_CustomMessage_Error(t *testing.T) {
+	le := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Timestamp:  1234567890,
+		LogId:      300,
+		LogDigest:  "digest",
+		Type:       255,
+		Body:       map[string]any{},
+	}
+
+	_, err := le.ToLogEventElastic()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing or invalid custom message")
+}

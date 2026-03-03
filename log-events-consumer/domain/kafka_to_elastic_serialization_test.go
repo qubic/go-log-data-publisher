@@ -14,12 +14,24 @@ func TestLogEvent_Integration(t *testing.T) {
 		expected string
 	}{
 		{
+			filename: "testdata/kafka/qu-transfer-positive-amount.json",
+			expected: "testdata/elastic/qu-transfer-positive-amount.json",
+		},
+		{
+			filename: "testdata/kafka/asset-issuance.json",
+			expected: "testdata/elastic/asset-issuance.json",
+		},
+		{
 			filename: "testdata/kafka/asset-ownership-change.json",
 			expected: "testdata/elastic/asset-ownership-change.json",
 		},
 		{
 			filename: "testdata/kafka/asset-possession-change.json",
 			expected: "testdata/elastic/asset-possession-change.json",
+		},
+		{
+			filename: "testdata/kafka/contract-information-message.json",
+			expected: "testdata/elastic/contract-information-message.json",
 		},
 		{
 			filename: "testdata/kafka/burn-end-tick.json",
@@ -30,24 +42,20 @@ func TestLogEvent_Integration(t *testing.T) {
 			expected: "testdata/elastic/burn-with-transaction.json",
 		},
 		{
+			filename: "testdata/kafka/asset-ownership-managing-contract-change.json",
+			expected: "testdata/elastic/asset-ownership-managing-contract-change.json",
+		},
+		{
+			filename: "testdata/kafka/asset-possession-managing-contract-change.json",
+			expected: "testdata/elastic/asset-possession-managing-contract-change.json",
+		},
+		{
 			filename: "testdata/kafka/contract-reserve-deduction-begin-tick.json",
 			expected: "testdata/elastic/contract-reserve-deduction-begin-tick.json",
 		},
 		{
 			filename: "testdata/kafka/contract-reserve-deduction-with-transaction.json",
 			expected: "testdata/elastic/contract-reserve-deduction-with-transaction.json",
-		},
-		{
-			filename: "testdata/kafka/qu-transfer-positive-amount.json",
-			expected: "testdata/elastic/qu-transfer-positive-amount.json",
-		},
-		{
-			filename: "testdata/kafka/asset-issuance.json",
-			expected: "testdata/elastic/asset-issuance.json",
-		},
-		{
-			filename: "testdata/kafka/contract-information-message.json",
-			expected: "testdata/elastic/contract-information-message.json",
 		},
 		{
 			filename: "testdata/kafka/custom-message-start-dividends.json",

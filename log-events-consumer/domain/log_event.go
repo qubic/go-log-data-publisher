@@ -116,13 +116,19 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	case lee.Type == 4, lee.Type == 5, lee.Type == 6, lee.Type == 7:
 		err = handleSmartContractMessage(&lee, le.Body)
 		if err != nil {
-			return LogEventElastic{}, fmt.Errorf("handling smart contract message: %w", err)
+			return LogEventElastic{}, fmt.Errorf("handling smart contract message with type [%d]: %w", lee.Type, err)
 		}
 
 	case lee.Type == 8:
 		err = handleBurn(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling burn: %w", err)
+		}
+
+	case lee.Type == 9, lee.Type == 10, lee.Type == 11, lee.Type == 12: // raw payload only
+		err = handleRaw(&lee, le.Body)
+		if err != nil {
+			return LogEventElastic{}, fmt.Errorf("handling raw event with type [%d]: %w", lee.Type, err)
 		}
 
 	case lee.Type == 13:
@@ -357,6 +363,21 @@ func handleBurn(lee *LogEventElastic, body map[string]any) error {
 	lee.ContractIndexBurnedFor, err = toUint64(contractIndexBurnedFor)
 	if err != nil {
 		return fmt.Errorf("converting contract index burned for: %w", err)
+	}
+
+	return nil
+}
+
+func handleRaw(lee *LogEventElastic, body map[string]any) error {
+	var err error
+
+	hexValue, ok := body["hex"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid hex content")
+	}
+	lee.RawPayload, err = hex.DecodeString(hexValue)
+	if err != nil {
+		return fmt.Errorf("converting hex to raw payload: %w", err)
 	}
 
 	return nil
