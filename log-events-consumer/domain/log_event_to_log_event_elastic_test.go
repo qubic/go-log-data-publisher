@@ -61,7 +61,7 @@ func TestLogEvent_ToLogEventElastic_SpecialSystemTransactions(t *testing.T) {
 				TickNumber:      200,
 				Type:            0,
 				LogId:           400,
-				LogDigest:       "abcd1234",
+				LogDigest:       "abc1234",
 				TransactionHash: tt.transactionHash,
 				Timestamp:       1234567890,
 				Body: map[string]any{
@@ -76,12 +76,12 @@ func TestLogEvent_ToLogEventElastic_SpecialSystemTransactions(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Verify category is set correctly
-			if result.Category == nil {
-				t.Fatalf("expected Category to be set, got nil")
+			// Verify categories are set correctly
+			if result.Categories == nil || len(result.Categories) == 0 {
+				t.Fatalf("expected Categories to be set, got nil or empty")
 			}
-			if *result.Category != tt.expectedCategory {
-				t.Errorf("expected Category=%d, got %d", tt.expectedCategory, *result.Category)
+			if result.Categories[0] != tt.expectedCategory {
+				t.Errorf("expected Categories[0]=%d, got %d", tt.expectedCategory, result.Categories[0])
 			}
 
 			// Verify transaction hash is cleared
@@ -117,7 +117,7 @@ func TestLogEvent_ToLogEventElastic_SpecialTransactionJSON(t *testing.T) {
 				TickNumber:      200,
 				Type:            0,
 				LogId:           400,
-				LogDigest:       "abcd1234",
+				LogDigest:       "abc1234",
 				TransactionHash: tt.transactionHash,
 				Timestamp:       1234567890,
 				Body: map[string]any{
@@ -145,16 +145,20 @@ func TestLogEvent_ToLogEventElastic_SpecialTransactionJSON(t *testing.T) {
 				t.Fatalf("failed to unmarshal JSON: %v", err)
 			}
 
-			// Verify category is present in JSON (even if 0)
-			categoryValue, exists := jsonMap["category"]
+			// Verify categories is present in JSON
+			categoriesValue, exists := jsonMap["categories"]
 			if !exists {
-				t.Errorf("expected 'category' to be present in JSON, but it was missing")
+				t.Errorf("expected 'categories' to be present in JSON, but it was missing")
 			} else {
-				// JSON numbers are float64
-				if categoryFloat, ok := categoryValue.(float64); !ok {
-					t.Errorf("expected category to be a number, got %T", categoryValue)
+				// JSON arrays are []interface{}
+				if categoriesArray, ok := categoriesValue.([]interface{}); !ok {
+					t.Errorf("expected categories to be an array, got %T", categoriesValue)
+				} else if len(categoriesArray) == 0 {
+					t.Errorf("expected categories array to have at least one element")
+				} else if categoryFloat, ok := categoriesArray[0].(float64); !ok {
+					t.Errorf("expected categories[0] to be a number, got %T", categoriesArray[0])
 				} else if byte(categoryFloat) != tt.expectedCategory {
-					t.Errorf("expected category=%d in JSON, got %f", tt.expectedCategory, categoryFloat)
+					t.Errorf("expected categories[0]=%d in JSON, got %f", tt.expectedCategory, categoryFloat)
 				}
 			}
 
@@ -466,4 +470,246 @@ func TestLogEvent_ToLogEventElastic_ReserveDeduction_Error(t *testing.T) {
 	_, err := le.ToLogEventElastic()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing or invalid remaining amount")
+}
+
+func TestLogEvent_ToLogEventElastic_CustomMessage_Success(t *testing.T) {
+	le := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Timestamp:  1234567890,
+		LogId:      300,
+		LogDigest:  "digest",
+		Type:       255,
+		Body: map[string]any{
+			"customMessage": "1234567890",
+		},
+	}
+
+	lee, err := le.ToLogEventElastic()
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(1234567890), *lee.CustomMessage)
+}
+
+func TestLogEvent_ToLogEventElastic_CustomMessage_Error(t *testing.T) {
+	le := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Timestamp:  1234567890,
+		LogId:      300,
+		LogDigest:  "digest",
+		Type:       255,
+		Body:       map[string]any{},
+	}
+
+	_, err := le.ToLogEventElastic()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing or invalid custom message")
+}
+
+func TestLogEvent_ToLogEventElastic_SmartContractMessages(t *testing.T) {
+	tests := []struct {
+		name    string
+		logType int16
+		scIndex float64
+		scType  float64
+		content string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "Type 4 - Valid smart contract message",
+			logType: 4,
+			scIndex: 1.0,
+			scType:  100.0,
+			content: "deadbeef",
+			wantErr: false,
+		},
+		{
+			name:    "Type 5 - Valid smart contract message",
+			logType: 5,
+			scIndex: 2.0,
+			scType:  200.0,
+			content: "cafebabe",
+			wantErr: false,
+		},
+		{
+			name:    "Type 6 - Valid smart contract message",
+			logType: 6,
+			scIndex: 3.0,
+			scType:  300.0,
+			content: "decafbad",
+			wantErr: false,
+		},
+		{
+			name:    "Type 7 - Valid smart contract message",
+			logType: 7,
+			scIndex: 4.0,
+			scType:  400.0,
+			content: "feedface",
+			wantErr: false,
+		},
+		{
+			name:    "Type 4 - Missing scIndex",
+			logType: 4,
+			scType:  100.0,
+			content: "deadbeef",
+			wantErr: true,
+			errMsg:  "missing or invalid emitting sc index",
+		},
+		{
+			name:    "Type 5 - Missing scLogType",
+			logType: 5,
+			scIndex: 2.0,
+			content: "cafebabe",
+			wantErr: true,
+			errMsg:  "missing or invalid sc log message type",
+		},
+		{
+			name:    "Type 6 - Missing content",
+			logType: 6,
+			scIndex: 3.0,
+			scType:  300.0,
+			wantErr: true,
+			errMsg:  "missing or invalid sc message content",
+		},
+		{
+			name:    "Type 7 - Invalid hex content",
+			logType: 7,
+			scIndex: 4.0,
+			scType:  400.0,
+			content: "invalidhex",
+			wantErr: true,
+			errMsg:  "converting hex content to raw payload",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := map[string]any{}
+			if tt.scIndex != 0 {
+				body["scIndex"] = tt.scIndex
+			}
+			if tt.scType != 0 {
+				body["scLogType"] = tt.scType
+			}
+			if tt.content != "" {
+				body["content"] = tt.content
+			}
+
+			le := LogEvent{
+				Epoch:           100,
+				TickNumber:      200,
+				Timestamp:       1234567890,
+				TransactionHash: validTxHash,
+				LogId:           300,
+				LogDigest:       "digest",
+				Type:            tt.logType,
+				Body:            body,
+			}
+
+			lee, err := le.ToLogEventElastic()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					require.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, uint64(tt.scIndex), *lee.EmittingContractIndex)
+				assert.Equal(t, uint64(tt.scType), *lee.ContractMessageType)
+				assert.NotNil(t, lee.RawPayload)
+			}
+		})
+	}
+}
+
+func TestLogEvent_ToLogEventElastic_RawTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		logType  int16
+		hexValue string
+		wantErr  bool
+		errMsg   string
+	}{
+		{
+			name:     "Type 9 - Valid raw payload",
+			logType:  9,
+			hexValue: "deadbeef",
+			wantErr:  false,
+		},
+		{
+			name:     "Type 10 - Valid raw payload",
+			logType:  10,
+			hexValue: "cafebabe",
+			wantErr:  false,
+		},
+		{
+			name:     "Type 11 - Valid raw payload",
+			logType:  11,
+			hexValue: "decafbad",
+			wantErr:  false,
+		},
+		{
+			name:     "Type 12 - Valid raw payload",
+			logType:  12,
+			hexValue: "feedface",
+			wantErr:  false,
+		},
+		{
+			name:     "Type 9 - Missing hex field",
+			logType:  9,
+			hexValue: "",
+			wantErr:  true,
+			errMsg:   "missing or invalid hex content",
+		},
+		{
+			name:     "Type 10 - Invalid hex content",
+			logType:  10,
+			hexValue: "invalidhex",
+			wantErr:  true,
+			errMsg:   "converting hex to raw payload",
+		},
+		{
+			name:     "Type 11 - Odd length hex",
+			logType:  11,
+			hexValue: "abc",
+			wantErr:  true,
+			errMsg:   "converting hex to raw payload",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := map[string]any{}
+			if tt.hexValue != "" {
+				body["hex"] = tt.hexValue
+			}
+
+			le := LogEvent{
+				Epoch:           100,
+				TickNumber:      200,
+				Timestamp:       1234567890,
+				TransactionHash: validTxHash,
+				LogId:           300,
+				LogDigest:       "digest",
+				Type:            tt.logType,
+				Body:            body,
+			}
+
+			lee, err := le.ToLogEventElastic()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					require.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, lee.RawPayload)
+				assert.Greater(t, len(lee.RawPayload), 0)
+			}
+		})
+	}
 }

@@ -5,7 +5,7 @@
   "logId": 467868,
   "logDigest": "364ad554782b8b9c",
   "type": 8,
-  "category": 4,
+  "categories": [4],
   "source": "NAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAML",
   "amount": 750,
   "contractIndexBurnedFor": 13

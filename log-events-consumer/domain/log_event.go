@@ -1,8 +1,10 @@
 package domain
 
 import (
+	"encoding/hex"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/qubic/go-node-connector/types"
@@ -72,10 +74,9 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	if lee.LogId == 0 {
 		invalid = append(invalid, "logId")
 	}
-	// Disabled for the time being.
-	/*if lee.Timestamp == 0 {
+	if lee.Timestamp == 0 {
 		invalid = append(invalid, "timestamp")
-	}*/
+	}
 	if lee.LogDigest == "" {
 		invalid = append(invalid, "logDigest")
 	}
@@ -90,38 +91,56 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	if isCategorized {
 		// We want to omit transactionHash field if tx is special, and instead set the category
 		lee.TransactionHash = ""
-		lee.Category = &category
+		lee.Categories = Categories{category}
 	}
 
-	switch {
-	case lee.Type == 0:
+	switch lee.Type {
+	case 0:
 		err = handleQuTransfer(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling qu transfer: %w", err)
 		}
 
-	case lee.Type == 1:
+	case 1:
 		err = handleAssetIssuance(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling asset issuance: %w", err)
 		}
 
-	case lee.Type == 2, lee.Type == 3:
+	case 2, 3:
 		err = handleAssetTransfer(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling asset transfer: %w", err)
 		}
 
-	case lee.Type == 8:
+	case 4, 5, 6, 7:
+		err = handleSmartContractMessage(&lee, le.Body)
+		if err != nil {
+			return LogEventElastic{}, fmt.Errorf("handling smart contract message with type [%d]: %w", lee.Type, err)
+		}
+
+	case 8:
 		err = handleBurn(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling burn: %w", err)
 		}
 
-	case lee.Type == 13:
+	case 9, 10, 11, 12: // raw payload only
+		err = handleRaw(&lee, le.Body)
+		if err != nil {
+			return LogEventElastic{}, fmt.Errorf("handling raw event with type [%d]: %w", lee.Type, err)
+		}
+
+	case 13:
 		err = handleReserveDeduction(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling reserve deduction: %w", err)
+		}
+
+	case 255:
+		err = handleCustomMessage(&lee, le.Body)
+		if err != nil {
+			return LogEventElastic{}, fmt.Errorf("handling custom message: %w", err)
 		}
 
 	default:
@@ -283,6 +302,42 @@ func handleAssetTransfer(lee *LogEventElastic, body map[string]any) error {
 	return nil
 }
 
+// handleSmartContractMessage decode sc message if at least the contract index and the message type are present
+// typical message body like: `"body":{"content":"38637de88b66d44f53d1d2e0509f6d599393ad3a86ddc529ff6f2c1665bac0435153494c56455200e00f9700000000000100000000000000","scIndex":1,"scLogType":0}`
+// we convert hex to binary (submitted to elastic as base64 by default)
+func handleSmartContractMessage(lee *LogEventElastic, body map[string]any) error {
+	var err error
+
+	sci, ok := body["scIndex"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid emitting sc index")
+	}
+	lee.EmittingContractIndex, err = toUint64(sci)
+	if err != nil {
+		return fmt.Errorf("converting emitting contract index: %w", err)
+	}
+
+	sct, ok := body["scLogType"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid sc log message type")
+	}
+	lee.ContractMessageType, err = toUint64(sct)
+	if err != nil {
+		return fmt.Errorf("converting contract message type: %w", err)
+	}
+
+	content, ok := body["content"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid sc message content")
+	}
+	lee.RawPayload, err = hex.DecodeString(content)
+	if err != nil {
+		return fmt.Errorf("converting hex content to raw payload: %w", err)
+	}
+
+	return nil
+}
+
 func handleBurn(lee *LogEventElastic, body map[string]any) error {
 	var err error
 
@@ -308,6 +363,21 @@ func handleBurn(lee *LogEventElastic, body map[string]any) error {
 	lee.ContractIndexBurnedFor, err = toUint64(contractIndexBurnedFor)
 	if err != nil {
 		return fmt.Errorf("converting contract index burned for: %w", err)
+	}
+
+	return nil
+}
+
+func handleRaw(lee *LogEventElastic, body map[string]any) error {
+	var err error
+
+	hexValue, ok := body["hex"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid hex content")
+	}
+	lee.RawPayload, err = hex.DecodeString(hexValue)
+	if err != nil {
+		return fmt.Errorf("converting hex to raw payload: %w", err)
 	}
 
 	return nil
@@ -341,6 +411,22 @@ func handleReserveDeduction(lee *LogEventElastic, body map[string]any) error {
 	lee.RemainingAmount, err = toInt64(ra)
 	if err != nil {
 		return fmt.Errorf("converting remaining amount: %w", err)
+	}
+
+	return nil
+}
+
+func handleCustomMessage(lee *LogEventElastic, body map[string]any) error {
+	var err error
+
+	msg, ok := body["customMessage"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid custom message")
+	}
+	customMessageUint, err := strconv.ParseUint(msg, 10, 64)
+	lee.CustomMessage = &customMessageUint
+	if err != nil {
+		return fmt.Errorf("converting custom message [%s]: %w", msg, err)
 	}
 
 	return nil

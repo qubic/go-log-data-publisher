@@ -1,0 +1,16 @@
+{
+  "index": 10,
+  "type": 6,
+  "tickNumber": 44825376,
+  "epoch": 202,
+  "logDigest": "33928ec5a1ec0bf4",
+  "logId": 3071190,
+  "bodySize": 64,
+  "timestamp": 1772210252,
+  "transactionHash": "lwehntxvvscunbbiimrcddzoapcaewgaetdrkenludlhpsulyobbrulfibsj",
+  "body": {
+    "content": "38637de88b66d44f53d1d2e0509f6d599393ad3a86ddc529ff6f2c1665bac0435153494c56455200e00f9700000000000100000000000000",
+    "scIndex": 1,
+    "scLogType": 0
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "epoch": 202,
+  "tickNumber": 44712269,
+  "index": 12,
+  "type": 11,
+  "logId": 339847,
+  "logDigest": "0b2bd4c75e75f295",
+  "transactionHash": "cqqxevqatyfbcfsinkunochzgoagwkzlctnfjtsszdewfcicfxmrcdzbzbnj",
+  "timestamp": 1772042426,
+  "bodySize": 87,
+  "body": {
+    "hex": "baa8f428f6fda5101784b94049b8c36da8490bfff6b8d8158b6f414b840f33ffae151b4b784649a15775da2bfeba9b7b43b54a272e60274ba66b5c009d7e4377130000000d000000308904000000000051584d52000000"
+  }
+}

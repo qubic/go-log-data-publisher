@@ -71,7 +71,7 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 	// List of fields with omitempty
 	omitemptyFields := []string{
 		"transactionHash",
-		"category",
+		"categories",
 		"source",
 		"destination",
 		"amount",
@@ -95,7 +95,6 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 	}
 
 	// Now set ALL omitempty fields and verify they ARE present
-	cat := uint8(5)
 	amount := uint64(100)
 	shares := uint64(50)
 	managingContract := uint64(10)
@@ -107,7 +106,7 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 	emittingContractIndex := uint64(1)
 
 	lee.TransactionHash = "some-tx-hash"
-	lee.Category = &cat
+	lee.Categories = Categories{1, 2, 3}
 	lee.Source = "source-addr"
 	lee.Destination = "dest-addr"
 	lee.Amount = &amount
