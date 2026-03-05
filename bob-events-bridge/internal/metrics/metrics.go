@@ -9,9 +9,6 @@ import (
 )
 
 type BridgeMetrics struct {
-	kafkaMessagesPublishedTotalCounter *prometheus.CounterVec
-	kafkaPublishErrorsTotalCounter     *prometheus.CounterVec
-
 	processorEventsReceivedTotalCounter     *prometheus.CounterVec
 	processorEventsProcessedTotalCounter    *prometheus.CounterVec
 	processorEventsDeduplicatedTotalCounter *prometheus.CounterVec
@@ -34,25 +31,6 @@ func NewBridgeMetrics(registerer prometheus.Registerer, namespace string) *Bridg
 	factory := promauto.With(registerer)
 
 	metrics := BridgeMetrics{
-		// Kafka metrics
-		kafkaMessagesPublishedTotalCounter: factory.NewCounterVec(prometheus.CounterOpts{
-			Namespace: namespace,
-			Subsystem: "kafka",
-			Name:      "messages_published_total",
-			Help:      "Total number of messages published to Kafka",
-		},
-			[]string{"event_type", "event_type_name", "topic"},
-		),
-		kafkaPublishErrorsTotalCounter: factory.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Subsystem: "kafka",
-				Name:      "publish_errors_total",
-				Help:      "Total number of Kafka publish errors",
-			},
-			[]string{"error_type"},
-		),
-
 		// Processor metrics
 		//
 		// NOTE: These counters track per-attempt counts, not unique events. Due to
@@ -159,20 +137,6 @@ func NewBridgeMetrics(registerer prometheus.Registerer, namespace string) *Bridg
 	}
 
 	return &metrics
-}
-
-// Kafka metrics methods
-
-func (m *BridgeMetrics) IncKafkaMessagesPublished(eventType uint32, topic string) {
-	m.kafkaMessagesPublishedTotalCounter.WithLabelValues(
-		strconv.FormatUint(uint64(eventType), 10),
-		bob.GetLogTypeName(eventType),
-		topic,
-	).Inc()
-}
-
-func (m *BridgeMetrics) IncKafkaPublishErrors(errorType string) {
-	m.kafkaPublishErrorsTotalCounter.WithLabelValues(errorType).Inc()
 }
 
 // Processor metrics methods

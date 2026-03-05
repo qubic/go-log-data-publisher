@@ -95,7 +95,11 @@ func main() {
 	var kafkaPublisher kafka.Publisher
 	if cfg.Kafka.Enabled {
 		brokers := strings.Split(cfg.Kafka.Brokers, ",")
-		kafkaPublisher = kafka.NewProducer(brokers, cfg.Kafka.Topic, logger, bridgeMetrics)
+		producer, err := kafka.NewProducer(brokers, cfg.Kafka.Topic, logger, prometheus.DefaultRegisterer, prometheus.DefaultGatherer, cfg.Metrics.Namespace)
+		if err != nil {
+			logger.Fatal("Failed to create Kafka producer", zap.Error(err))
+		}
+		kafkaPublisher = producer
 		defer kafkaPublisher.Close() //nolint:errcheck
 		logger.Info("Kafka publisher enabled",
 			zap.Strings("brokers", brokers),

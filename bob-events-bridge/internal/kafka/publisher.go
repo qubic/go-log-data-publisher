@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/qubic/bob-events-bridge/internal/metrics"
-	kafkago "github.com/segmentio/kafka-go"
-	"github.com/segmentio/kafka-go/compress"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/plugin/kprom"
 	"go.uber.org/zap"
 )
 
@@ -18,29 +18,35 @@ type Publisher interface {
 	Close() error
 }
 
-// Producer is the real Kafka publisher using segmentio/kafka-go.
+// Producer is the real Kafka publisher using franz-go.
 type Producer struct {
-	writer  *kafkago.Writer
-	logger  *zap.Logger
-	metrics *metrics.BridgeMetrics
+	client *kgo.Client
+	logger *zap.Logger
 }
 
-// NewProducer creates a new Kafka producer.
-func NewProducer(brokers []string, topic string, logger *zap.Logger, metrics *metrics.BridgeMetrics) *Producer {
-	w := &kafkago.Writer{
-		Addr:                   kafkago.TCP(brokers...),
-		Topic:                  topic,
-		Balancer:               &kafkago.Hash{},
-		RequiredAcks:           kafkago.RequireAll,
-		Compression:            compress.Lz4,
-		AllowAutoTopicCreation: false,
+// NewProducer creates a new Kafka producer using franz-go with kprom metrics.
+func NewProducer(brokers []string, topic string, logger *zap.Logger, registerer prometheus.Registerer, gatherer prometheus.Gatherer, metricsNamespace string) (*Producer, error) {
+	kpromMetrics := kprom.NewMetrics(metricsNamespace,
+		kprom.Registerer(registerer),
+		kprom.Gatherer(gatherer),
+	)
+
+	client, err := kgo.NewClient(
+		kgo.WithHooks(kpromMetrics),
+		kgo.SeedBrokers(brokers...),
+		kgo.DefaultProduceTopic(topic),
+		kgo.ProducerLinger(0),
+		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.ProducerBatchCompression(kgo.Lz4Compression()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating franz-go client: %w", err)
 	}
 
 	return &Producer{
-		writer:  w,
-		logger:  logger,
-		metrics: metrics,
-	}
+		client: client,
+		logger: logger,
+	}, nil
 }
 
 // PublishEvent serializes an EventMessage to JSON and writes it to Kafka.
@@ -48,21 +54,19 @@ func NewProducer(brokers []string, topic string, logger *zap.Logger, metrics *me
 func (p *Producer) PublishEvent(ctx context.Context, msg *EventMessage) error {
 	value, err := json.Marshal(msg)
 	if err != nil {
-		p.metrics.IncKafkaPublishErrors("marshal_error")
 		return fmt.Errorf("failed to marshal event message: %w", err)
 	}
 
 	key := []byte(fmt.Sprintf("%d", msg.TickNumber))
 
-	if err := p.writer.WriteMessages(ctx, kafkago.Message{
+	results := p.client.ProduceSync(ctx, &kgo.Record{
 		Key:   key,
 		Value: value,
-	}); err != nil {
-		p.metrics.IncKafkaPublishErrors("publish_error")
+	})
+
+	if err := results.FirstErr(); err != nil {
 		return fmt.Errorf("failed to write message to kafka: %w", err)
 	}
-
-	p.metrics.IncKafkaMessagesPublished(msg.Type, p.writer.Topic)
 
 	p.logger.Debug("Published event to Kafka",
 		zap.Uint64("logId", msg.LogID),
@@ -78,27 +82,23 @@ func (p *Producer) PublishEvents(ctx context.Context, msgs []*EventMessage) erro
 		return nil
 	}
 
-	kafkaMsgs := make([]kafkago.Message, 0, len(msgs))
+	records := make([]*kgo.Record, 0, len(msgs))
 	for _, msg := range msgs {
 		value, err := json.Marshal(msg)
 		if err != nil {
-			p.metrics.IncKafkaPublishErrors("marshal_error")
 			return fmt.Errorf("failed to marshal event message: %w", err)
 		}
 		key := []byte(fmt.Sprintf("%d", msg.TickNumber))
-		kafkaMsgs = append(kafkaMsgs, kafkago.Message{
+		records = append(records, &kgo.Record{
 			Key:   key,
 			Value: value,
 		})
 	}
 
-	if err := p.writer.WriteMessages(ctx, kafkaMsgs...); err != nil {
-		p.metrics.IncKafkaPublishErrors("publish_error")
-		return fmt.Errorf("failed to write messages to kafka: %w", err)
-	}
+	results := p.client.ProduceSync(ctx, records...)
 
-	for _, msg := range msgs {
-		p.metrics.IncKafkaMessagesPublished(msg.Type, p.writer.Topic)
+	if err := results.FirstErr(); err != nil {
+		return fmt.Errorf("failed to write messages to kafka: %w", err)
 	}
 
 	p.logger.Debug("Published batch to Kafka",
@@ -108,7 +108,8 @@ func (p *Producer) PublishEvents(ctx context.Context, msgs []*EventMessage) erro
 	return nil
 }
 
-// Close flushes and closes the Kafka writer.
+// Close closes the franz-go client.
 func (p *Producer) Close() error {
-	return p.writer.Close()
+	p.client.Close()
+	return nil
 }
