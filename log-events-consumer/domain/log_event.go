@@ -56,12 +56,16 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	lee := LogEventElastic{
 		Epoch:           le.Epoch,
 		TickNumber:      le.TickNumber,
-		Timestamp:       le.Timestamp,
 		TransactionHash: le.TransactionHash,
 		LogId:           le.LogId,
 		LogDigest:       le.LogDigest,
 		Type:            le.Type,
 	}
+
+	if le.Timestamp > 10000000000 { // year 2286 in seconds
+		return LogEventElastic{}, fmt.Errorf("invalid seconds timestamp (probably already in ms): %d", le.Timestamp)
+	}
+	lee.Timestamp = le.Timestamp * 1000 // source is in seconds
 
 	// checking here again might be a bit paranoid
 	invalid := make([]string, 0, 6)

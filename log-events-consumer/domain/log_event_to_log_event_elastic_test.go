@@ -625,6 +625,105 @@ func TestLogEvent_ToLogEventElastic_SmartContractMessages(t *testing.T) {
 	}
 }
 
+func TestLogEvent_ToLogEventElastic_TimestampZeroError(t *testing.T) {
+	le := LogEvent{
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       0,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            0,
+		Body: map[string]any{
+			"source":      "source-identity",
+			"destination": "dest-identity",
+			"amount":      1000.0,
+		},
+	}
+
+	_, err := le.ToLogEventElastic()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid zero value field(s)")
+	require.Contains(t, err.Error(), "timestamp")
+}
+
+func TestLogEvent_ToLogEventElastic_TimestampConversion(t *testing.T) {
+	tests := []struct {
+		name             string
+		timestampSeconds uint64
+		expectedMillis   uint64
+	}{
+		{
+			name:             "Convert 1 second to 1000 milliseconds",
+			timestampSeconds: 1,
+			expectedMillis:   1000,
+		},
+		{
+			name:             "Convert Unix epoch timestamp",
+			timestampSeconds: 1234567890,
+			expectedMillis:   1234567890000,
+		},
+		{
+			name:             "Convert large timestamp",
+			timestampSeconds: 9999999999,
+			expectedMillis:   9999999999000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			le := LogEvent{
+				Epoch:           100,
+				TickNumber:      200,
+				Timestamp:       tt.timestampSeconds,
+				TransactionHash: validTxHash,
+				LogId:           300,
+				LogDigest:       "digest",
+				Type:            0,
+				Body: map[string]any{
+					"source":      "source-identity",
+					"destination": "dest-identity",
+					"amount":      1000.0,
+				},
+			}
+
+			lee, err := le.ToLogEventElastic()
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expectedMillis, lee.Timestamp, "timestamp should be converted from seconds to milliseconds")
+		})
+	}
+}
+
+func TestLogEvent_ToLogEventElastic_TimestampAlreadyInMillisecondsOverflow(t *testing.T) {
+	// Test with a timestamp that's already in milliseconds format
+	// After multiplication by 1000, it will cause uint64 overflow and wrap around
+	// uint64 max is 18446744073709551615
+	// Value that will overflow: anything > 18446744073709551
+	le := LogEvent{
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       100000000000,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            0,
+		Body: map[string]any{
+			"source":      "source-identity",
+			"destination": "dest-identity",
+			"amount":      1000.0,
+		},
+	}
+
+	_, err := le.ToLogEventElastic()
+	// In Go, uint64 overflow wraps around to a small number
+	// This will likely result in timestamp validation error since wraparound could produce 0
+	// or a very small number depending on the input
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "already in ms")
+	require.Contains(t, err.Error(), "timestamp")
+}
+
 func TestLogEvent_ToLogEventElastic_RawTypes(t *testing.T) {
 	tests := []struct {
 		name     string
