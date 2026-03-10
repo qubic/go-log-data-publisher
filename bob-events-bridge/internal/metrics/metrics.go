@@ -9,8 +9,7 @@ import (
 )
 
 type BridgeMetrics struct {
-	kafkaMessagesPublishedTotalCounter *prometheus.CounterVec
-	kafkaPublishErrorsTotalCounter     *prometheus.CounterVec
+	publisherMessagesPublishedTotalCounter *prometheus.CounterVec
 
 	processorEventsReceivedTotalCounter     *prometheus.CounterVec
 	processorEventsProcessedTotalCounter    *prometheus.CounterVec
@@ -34,23 +33,14 @@ func NewBridgeMetrics(registerer prometheus.Registerer, namespace string) *Bridg
 	factory := promauto.With(registerer)
 
 	metrics := BridgeMetrics{
-		// Kafka metrics
-		kafkaMessagesPublishedTotalCounter: factory.NewCounterVec(prometheus.CounterOpts{
+		// Publisher metrics
+		publisherMessagesPublishedTotalCounter: factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
-			Subsystem: "kafka",
+			Subsystem: "publisher",
 			Name:      "messages_published_total",
 			Help:      "Total number of messages published to Kafka",
 		},
 			[]string{"event_type", "event_type_name", "topic"},
-		),
-		kafkaPublishErrorsTotalCounter: factory.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Subsystem: "kafka",
-				Name:      "publish_errors_total",
-				Help:      "Total number of Kafka publish errors",
-			},
-			[]string{"error_type"},
 		),
 
 		// Processor metrics
@@ -161,18 +151,14 @@ func NewBridgeMetrics(registerer prometheus.Registerer, namespace string) *Bridg
 	return &metrics
 }
 
-// Kafka metrics methods
+// Publisher metrics methods
 
-func (m *BridgeMetrics) IncKafkaMessagesPublished(eventType uint32, topic string) {
-	m.kafkaMessagesPublishedTotalCounter.WithLabelValues(
+func (m *BridgeMetrics) IncPublisherMessagesPublished(eventType uint32, topic string) {
+	m.publisherMessagesPublishedTotalCounter.WithLabelValues(
 		strconv.FormatUint(uint64(eventType), 10),
 		bob.GetLogTypeName(eventType),
 		topic,
 	).Inc()
-}
-
-func (m *BridgeMetrics) IncKafkaPublishErrors(errorType string) {
-	m.kafkaPublishErrorsTotalCounter.WithLabelValues(errorType).Inc()
 }
 
 // Processor metrics methods
