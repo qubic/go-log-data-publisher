@@ -243,7 +243,7 @@ func TestBuildEventMessage(t *testing.T) {
 		Amount: 1000,
 	}
 
-	msg, err := BuildEventMessage(payload, body, 3)
+	msg, err := BuildEventMessage(payload, body, 3, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(3), msg.Index)
@@ -258,6 +258,7 @@ func TestBuildEventMessage(t *testing.T) {
 	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", msg.Body["source"])
 	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", msg.Body["destination"])
 	assert.Equal(t, int64(1000), msg.Body["amount"])
+	assert.False(t, msg.LastLogForTick)
 }
 
 func TestBuildEventMessage_NilBody(t *testing.T) {
@@ -272,7 +273,25 @@ func TestBuildEventMessage_NilBody(t *testing.T) {
 		TxHash:    "TXHASH",
 	}
 
-	msg, err := BuildEventMessage(payload, nil, 0)
+	msg, err := BuildEventMessage(payload, nil, 0, false)
 	require.NoError(t, err)
 	assert.Nil(t, msg.Body)
+	assert.False(t, msg.LastLogForTick)
+}
+
+func TestBuildEventMessage_LastLogForTick(t *testing.T) {
+	payload := &bob.LogPayload{
+		OK:        true,
+		Epoch:     145,
+		Tick:      22000001,
+		Type:      0,
+		LogID:     42,
+		LogDigest: "abc123",
+		Timestamp: uint64(1718461800),
+		TxHash:    "TXHASH",
+	}
+
+	msg, err := BuildEventMessage(payload, nil, 0, true)
+	require.NoError(t, err)
+	assert.True(t, msg.LastLogForTick)
 }

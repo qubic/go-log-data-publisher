@@ -352,7 +352,7 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		// Build kafka message (if publisher configured)
 		var kafkaMsg *kafka.EventMessage
 		if p.publisher != nil {
-			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex)
+			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex, false)
 			if err != nil {
 				return fmt.Errorf("failed to build kafka message: %w", err)
 			}
@@ -401,6 +401,14 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 			zap.Bool("isCatchUp", result.IsCatchUp),
 			zap.Bool("kafkaEnabled", p.publisher != nil),
 			zap.Int("batchSize", len(p.pendingBatch.protoEvents)))
+	}
+
+	// Mark last event in tick
+	if p.pendingBatch != nil && len(p.pendingBatch.protoEvents) > 0 {
+		p.pendingBatch.protoEvents[len(p.pendingBatch.protoEvents)-1].LastLogForTick = true
+		if len(p.pendingBatch.kafkaMsgs) > 0 {
+			p.pendingBatch.kafkaMsgs[len(p.pendingBatch.kafkaMsgs)-1].LastLogForTick = true
+		}
 	}
 
 	return nil
