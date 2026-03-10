@@ -29,8 +29,8 @@ type LogEventElastic struct {
 	TransactionHash string     `json:"transactionHash,omitempty"`
 	LogId           uint64     `json:"logId"`
 	LogDigest       string     `json:"logDigest"`
-	Type            int16      `json:"type"`                 // short in elastic
-	Categories      Categories `json:"categories,omitempty"` // TODO []uint8 would probably work, too (test)
+	Type            int16      `json:"type"` // short in elastic
+	Categories      Categories `json:"categories,omitempty"`
 
 	//Optional event body fields
 	EmittingContractIndex    *uint64 `json:"emittingContractIndex,omitempty"`
@@ -44,7 +44,7 @@ type LogEventElastic struct {
 	NumberOfShares           *uint64 `json:"numberOfShares,omitempty"`
 	ManagingContractIndex    *uint64 `json:"managingContractIndex,omitempty"`
 	UnitOfMeasurement        []byte  `json:"unitOfMeasurement,omitempty"`
-	NumberOfDecimalPlaces    *byte   `json:"numberOfDecimalPlaces,omitempty"` // TODO *uint8 would be better probably (test)
+	NumberOfDecimalPlaces    *byte   `json:"numberOfDecimalPlaces,omitempty"`
 	DeductedAmount           *uint64 `json:"deductedAmount,omitempty"`
 	RemainingAmount          *int64  `json:"remainingAmount,omitempty"`
 	ContractIndex            *uint64 `json:"contractIndex,omitempty"`
