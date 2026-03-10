@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/qubic/bob-events-bridge/internal/metrics"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/plugin/kprom"
 	"go.uber.org/zap"
@@ -20,12 +21,14 @@ type Publisher interface {
 
 // Producer is the real Kafka publisher using franz-go.
 type Producer struct {
-	client *kgo.Client
-	logger *zap.Logger
+	client  *kgo.Client
+	topic   string
+	logger  *zap.Logger
+	metrics *metrics.BridgeMetrics
 }
 
 // NewProducer creates a new Kafka producer using franz-go with kprom metrics.
-func NewProducer(brokers []string, topic string, logger *zap.Logger, registerer prometheus.Registerer, gatherer prometheus.Gatherer, metricsNamespace string) (*Producer, error) {
+func NewProducer(brokers []string, topic string, logger *zap.Logger, bridgeMetrics *metrics.BridgeMetrics, registerer prometheus.Registerer, gatherer prometheus.Gatherer, metricsNamespace string) (*Producer, error) {
 	kpromMetrics := kprom.NewMetrics(metricsNamespace,
 		kprom.Registerer(registerer),
 		kprom.Gatherer(gatherer),
@@ -44,8 +47,10 @@ func NewProducer(brokers []string, topic string, logger *zap.Logger, registerer 
 	}
 
 	return &Producer{
-		client: client,
-		logger: logger,
+		client:  client,
+		topic:   topic,
+		logger:  logger,
+		metrics: bridgeMetrics,
 	}, nil
 }
 
@@ -67,6 +72,8 @@ func (p *Producer) PublishEvent(ctx context.Context, msg *EventMessage) error {
 	if err := results.FirstErr(); err != nil {
 		return fmt.Errorf("failed to write message to kafka: %w", err)
 	}
+
+	p.metrics.IncPublisherMessagesPublished(msg.Type, p.topic)
 
 	p.logger.Debug("Published event to Kafka",
 		zap.Uint64("logId", msg.LogID),
@@ -99,6 +106,10 @@ func (p *Producer) PublishEvents(ctx context.Context, msgs []*EventMessage) erro
 
 	if err := results.FirstErr(); err != nil {
 		return fmt.Errorf("failed to write messages to kafka: %w", err)
+	}
+
+	for _, msg := range msgs {
+		p.metrics.IncPublisherMessagesPublished(msg.Type, p.topic)
 	}
 
 	p.logger.Debug("Published batch to Kafka",
