@@ -349,11 +349,10 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		// Build kafka message (if publisher configured)
 		var kafkaMsg *kafka.EventMessage
 		if p.publisher != nil {
-			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex)
+			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex, isLastLog)
 			if err != nil {
 				return fmt.Errorf("failed to build kafka message: %w", err)
 			}
-			kafkaMsg.LastLogForTick = isLastLog
 		}
 
 		// Create event proto
