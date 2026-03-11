@@ -5,7 +5,7 @@
   "transactionHash": "mdjpvxkmgljjfeskpiedvgdlgniesgiwgtmdvyhymaeeldzypwdwprpeuwed",
   "logId": 7783883,
   "logDigest": "216bbe5171cafb78",
-  "type": 2,
+  "logType": 2,
   "source": "BDSEQVHDWENCDACLLMEPWHTDJPGDSDGTODHPYNMRPDHKTOAXFKSPRYGEXEOF",
   "destination": "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
   "assetName": "QFT",

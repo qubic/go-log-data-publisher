@@ -4,7 +4,7 @@
   "timestamp": 1770761243000,
   "logId": 7232952,
   "logDigest": "8167c3441c5dd94c",
-  "type": 13,
+  "logType": 13,
   "categories": [3],
   "contractIndex": 23,
   "deductedAmount": 2,

@@ -5,7 +5,7 @@
   "transactionHash": "mlvtvlzzsdanjhtxuqalswyfflnbtgqyskshjsshudhxmwlvwovnmmrgazmi",
   "logId": 7244209,
   "logDigest": "f4f46c32001a7fbf",
-  "type": 13,
+  "logType": 13,
   "contractIndex": 9,
   "deductedAmount": 1,
   "remainingAmount": 577551557614

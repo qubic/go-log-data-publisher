@@ -59,7 +59,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		TransactionHash: le.TransactionHash,
 		LogId:           le.LogId,
 		LogDigest:       le.LogDigest,
-		Type:            le.Type,
+		LogType:         le.Type,
 	}
 
 	if le.Timestamp > 10000000000 { // year 2286 in seconds
@@ -98,7 +98,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		lee.Categories = Categories{category}
 	}
 
-	switch lee.Type {
+	switch lee.LogType {
 	case 0:
 		err = handleQuTransfer(&lee, le.Body)
 		if err != nil {
@@ -120,7 +120,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	case 4, 5, 6, 7:
 		err = handleSmartContractMessage(&lee, le.Body)
 		if err != nil {
-			return LogEventElastic{}, fmt.Errorf("handling smart contract message with type [%d]: %w", lee.Type, err)
+			return LogEventElastic{}, fmt.Errorf("handling smart contract message with type [%d]: %w", lee.LogType, err)
 		}
 
 	case 8:
@@ -132,7 +132,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	case 9, 10, 11, 12: // raw payload only
 		err = handleRaw(&lee, le.Body)
 		if err != nil {
-			return LogEventElastic{}, fmt.Errorf("handling raw event with type [%d]: %w", lee.Type, err)
+			return LogEventElastic{}, fmt.Errorf("handling raw event with type [%d]: %w", lee.LogType, err)
 		}
 
 	case 13:
@@ -148,7 +148,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		}
 
 	default:
-		return LogEventElastic{}, fmt.Errorf("unsupported type: %v", lee.Type)
+		return LogEventElastic{}, fmt.Errorf("unsupported type: %v", lee.LogType)
 
 	}
 
@@ -316,7 +316,7 @@ func handleSmartContractMessage(lee *LogEventElastic, body map[string]any) error
 	if !ok {
 		return fmt.Errorf("missing or invalid emitting sc index")
 	}
-	lee.EmittingContractIndex, err = toUint64(sci)
+	lee.ContractIndex, err = toUint64(sci)
 	if err != nil {
 		return fmt.Errorf("converting emitting contract index: %w", err)
 	}
@@ -364,7 +364,7 @@ func handleBurn(lee *LogEventElastic, body map[string]any) error {
 	if !ok {
 		return fmt.Errorf("missing or invalid contract index burned for")
 	}
-	lee.ContractIndexBurnedFor, err = toUint64(contractIndexBurnedFor)
+	lee.ContractIndex, err = toUint64(contractIndexBurnedFor)
 	if err != nil {
 		return fmt.Errorf("converting contract index burned for: %w", err)
 	}

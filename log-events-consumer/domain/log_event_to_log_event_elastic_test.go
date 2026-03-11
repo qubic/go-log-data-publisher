@@ -403,7 +403,7 @@ func TestLogEvent_ToLogEventElastic_Burn_Success(t *testing.T) {
 
 	assert.Equal(t, "source-identity", lee.Source)
 	assert.Equal(t, uint64(100), *lee.Amount)
-	assert.Equal(t, uint64(1), *lee.ContractIndexBurnedFor)
+	assert.Equal(t, uint64(1), *lee.ContractIndex)
 }
 
 func TestLogEvent_ToLogEventElastic_Burn_Error(t *testing.T) {
@@ -617,7 +617,7 @@ func TestLogEvent_ToLogEventElastic_SmartContractMessages(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, uint64(tt.scIndex), *lee.EmittingContractIndex)
+				assert.Equal(t, uint64(tt.scIndex), *lee.ContractIndex)
 				assert.Equal(t, uint64(tt.scType), *lee.ContractMessageType)
 				assert.NotNil(t, lee.RawPayload)
 			}

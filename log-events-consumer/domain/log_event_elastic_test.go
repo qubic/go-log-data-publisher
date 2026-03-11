@@ -41,7 +41,7 @@ func TestLogEventElastic_IsSupported(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			le := &LogEventElastic{Type: tt.eventType, Amount: &tt.amount}
+			le := &LogEventElastic{LogType: tt.eventType, Amount: &tt.amount}
 			if got := le.IsSupported(); got != tt.want {
 				t.Errorf("IsSupported() = %v, want %v", got, tt.want)
 			}
@@ -57,7 +57,7 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 		Timestamp:  3,
 		LogId:      4,
 		LogDigest:  "digest",
-		Type:       1,
+		LogType:    1,
 	}
 
 	data, err := json.Marshal(lee)
@@ -84,8 +84,6 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 		"deductedAmount",
 		"remainingAmount",
 		"contractIndex",
-		"contractIndexBurnedFor",
-		"emittingContractIndex",
 	}
 
 	for _, field := range omitemptyFields {
@@ -102,8 +100,6 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 	deducted := uint64(20)
 	remaining := int64(80)
 	contractIdx := uint64(30)
-	burnedFor := uint64(40)
-	emittingContractIndex := uint64(1)
 
 	lee.TransactionHash = "some-tx-hash"
 	lee.Categories = Categories{1, 2, 3}
@@ -119,8 +115,6 @@ func TestLogEventElastic_Omitempty(t *testing.T) {
 	lee.DeductedAmount = &deducted
 	lee.RemainingAmount = &remaining
 	lee.ContractIndex = &contractIdx
-	lee.ContractIndexBurnedFor = &burnedFor
-	lee.EmittingContractIndex = &emittingContractIndex
 
 	data, err = json.Marshal(lee)
 	if err != nil {

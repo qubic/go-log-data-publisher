@@ -5,7 +5,7 @@
   "transactionHash": "dkzxuegxfbbeeanspaourlzbmtdbhakfarbybmkiygegoavqugvfjxqfdspn",
   "logId": 282618,
   "logDigest": "ab042c99d9461881",
-  "type": 0,
+  "logType": 0,
   "source": "SNBCRTNTDZHPJCFURNNSVKTKPVOCKIWVOYNJIGLRRCOCVWOAKFIWLHEHRHDO",
   "destination": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
   "amount": 8

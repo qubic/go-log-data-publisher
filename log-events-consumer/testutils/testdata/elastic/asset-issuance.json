@@ -5,7 +5,7 @@
   "transactionHash": "joieezsjflprlgerjphlyuwsykzabipxkyjqgwfnbgeyuuhfoocugmbembwd",
   "logId": 6036961,
   "logDigest": "efd149b5526ae0bf",
-  "type": 1,
+  "logType": 1,
   "assetName": "BURNER",
   "assetIssuer": "BIWLXVCUXYLOQDANJVESJVABISGCNURGYTXMEJTCHBBOEMNZUJQKPPECMBDO",
   "managingContractIndex": 1,
