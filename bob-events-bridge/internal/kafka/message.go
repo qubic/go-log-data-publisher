@@ -18,7 +18,7 @@ type EventMessage struct {
 	Timestamp       uint64         `json:"timestamp"`
 	TransactionHash string         `json:"transactionHash"`
 	Body            map[string]any `json:"body"`
-	LastLogForTick  bool           `json:"lastLogForTick"`
+	LastLogForTick  bool           `json:"lastLogForTick,omitempty"`
 }
 
 // TransformEventBody converts a typed bob event body into the Kafka body format

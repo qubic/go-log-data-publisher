@@ -1,6 +1,7 @@
 package kafka
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -301,5 +302,30 @@ func TestBuildEventMessage_LastLogForTick(t *testing.T) {
 	msg, err := BuildEventMessage(payload, body, 5, true)
 	require.NoError(t, err)
 	assert.True(t, msg.LastLogForTick)
+}
+
+func TestEventMessage_JSON_OmitsLastLogForTickWhenFalse(t *testing.T) {
+	msg := EventMessage{
+		Index:      1,
+		Type:       0,
+		TickNumber: 100,
+	}
+
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "lastLogForTick")
+}
+
+func TestEventMessage_JSON_IncludesLastLogForTickWhenTrue(t *testing.T) {
+	msg := EventMessage{
+		Index:          1,
+		Type:           0,
+		TickNumber:     100,
+		LastLogForTick: true,
+	}
+
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"lastLogForTick":true`)
 }
 
