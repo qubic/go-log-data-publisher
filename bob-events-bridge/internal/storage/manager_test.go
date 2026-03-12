@@ -393,6 +393,34 @@ func TestCountEventsForTick(t *testing.T) {
 	require.Equal(t, uint32(0), count)
 }
 
+func TestLastLogForTickRoundTrip(t *testing.T) {
+	tempDir := t.TempDir()
+	manager := createTestManager(t, tempDir)
+	defer manager.Close() //nolint:errcheck
+
+	// Store event with LastLogForTick = true
+	event := createTestEvent(1, 100, 1)
+	event.LastLogForTick = true
+	err := manager.StoreEvent(event)
+	require.NoError(t, err)
+
+	// Retrieve and verify
+	_, events, err := manager.GetEventsForTick(100)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.True(t, events[0].LastLogForTick, "Expected LastLogForTick to round-trip as true")
+
+	// Store event with LastLogForTick = false (default)
+	event2 := createTestEvent(1, 101, 2)
+	err = manager.StoreEvent(event2)
+	require.NoError(t, err)
+
+	_, events2, err := manager.GetEventsForTick(101)
+	require.NoError(t, err)
+	require.Len(t, events2, 1)
+	require.False(t, events2[0].LastLogForTick, "Expected LastLogForTick to round-trip as false")
+}
+
 func TestBasePath(t *testing.T) {
 	// Create temp directory
 	tempDir := t.TempDir()

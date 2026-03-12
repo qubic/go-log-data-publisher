@@ -254,8 +254,8 @@ func TestE2E_EpochTransition(t *testing.T) {
 	require.Contains(t, epochs, uint32(146))
 }
 
-// TestE2E_Deduplication tests that duplicate events are not stored twice
-func TestE2E_Deduplication(t *testing.T) {
+// TestE2E_EventOverwrite tests that resent events are overwritten in storage (no dedup)
+func TestE2E_EventOverwrite(t *testing.T) {
 	mockBob := NewMockBobServer(145, 22000000)
 	defer mockBob.Close()
 
@@ -301,7 +301,7 @@ func TestE2E_Deduplication(t *testing.T) {
 		return exists
 	}, "first event should be stored")
 
-	// Send duplicate
+	// Resend the same event (bob resends on reconnect — no dedup, overwrites in storage)
 	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
 		Epoch:        145,
 		Tick:         22000001,
@@ -312,13 +312,13 @@ func TestE2E_Deduplication(t *testing.T) {
 	require.NoError(t, err)
 	mockBob.SendCatchUpComplete()
 
-	// Give some time for the duplicate to be processed
+	// Give some time for the resent event to be processed
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify only one event is stored
+	// Verify still one event stored (overwritten with same data)
 	_, events, err := storageMgr.GetEventsForTick(22000001)
 	require.NoError(t, err)
-	require.Len(t, events, 1, "Duplicate event should not be stored")
+	require.Len(t, events, 1, "Resent event should overwrite, not duplicate")
 }
 
 // TestE2E_StatePersistence tests that state (lastTick/lastLogID/currentEpoch) is persisted
@@ -789,7 +789,8 @@ func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
 	require.True(t, indicesB[2], "Expected IndexInTick 2 for tick B")
 }
 
-// TestE2E_CrashRecoveryIndexInTick tests that IndexInTick is correctly recovered after crash
+// TestE2E_CrashRecoveryIndexInTick tests IndexInTick behavior after crash recovery.
+// Without dedup, resent events are re-processed with indexes continuing from the recovered count.
 func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 	tempDir := t.TempDir()
 	tick := uint32(22000050)
@@ -839,7 +840,9 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 		_ = storageMgr.Close()
 	}()
 
-	// Phase 2: Restart, send 2 duplicates + 1 new event, verify new event gets index 2
+	// Phase 2: Restart, resend 2 events + 1 new event.
+	// Without dedup, all 3 are processed. Index resumes from recovered count (2).
+	// Resent events get indexes 2, 3 (overwritten in storage), new event gets index 4.
 	mockBob2 := NewMockBobServer(145, 22000000)
 	defer mockBob2.Close()
 
@@ -860,7 +863,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 	_, err = mockBob2.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Resend the 2 duplicate events + 1 new event in one tickStream message
+	// Resend the 2 events + 1 new event in one tickStream message
 	var logs []bob.LogPayload
 	for i := uint64(1); i <= 2; i++ {
 		logs = append(logs, CreateLogPayload(145, tick, i, 0, map[string]any{
@@ -890,16 +893,17 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 		return len(events) >= 3
 	}, "3 events should be stored after recovery")
 
-	// Verify the new event has IndexInTick=2
+	// Verify all 3 events are stored
 	service := grpc.NewEventsBridgeService(storageMgr2, zap.NewNop())
 	resp, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: tick})
 	require.NoError(t, err)
 	require.Len(t, resp.Events, 3)
 
-	// Find the event with logID=3 (the new one) and check its index
+	// Without dedup, resent events continue from recovered index (2).
+	// New event (logID=3) gets IndexInTick=4.
 	for _, event := range resp.Events {
 		if event.LogId == 3 {
-			require.Equal(t, uint32(2), event.IndexInTick, "New event after crash recovery should have IndexInTick=2")
+			require.Equal(t, uint32(4), event.IndexInTick, "New event after crash recovery should have IndexInTick=4 (resumed from recovered count)")
 		}
 	}
 }
@@ -1474,9 +1478,9 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 	assert.Equal(t, uint64(1), msgs[0].LogID)
 }
 
-// TestE2E_IndexResetAfterDeduplication tests that IndexInTick resets to 0 for a new tick
-// even when all events from the previous tick were deduplicated (pendingBatch is nil).
-func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
+// TestE2E_IndexResetAfterResend tests that IndexInTick resets to 0 for a new tick
+// even when events from the previous tick were resent (overwritten, no dedup).
+func TestE2E_IndexResetAfterResend(t *testing.T) {
 	tempDir := t.TempDir()
 	tickOld := uint32(22000050) // Previous tick
 	tickNew := uint32(22000051) // New tick
@@ -1534,8 +1538,8 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 		_ = storageMgr.Close()
 	}()
 
-	// Phase 2: Restart, resend tickOld events (will be deduplicated), then send tickNew events.
-	// The tickNew events should start with index 0, not index 3.
+	// Phase 2: Restart, resend tickOld events (now re-processed and published), then send tickNew events.
+	// The tickNew events should start with index 0.
 	mockBob2 := NewMockBobServer(145, 22000000)
 	defer mockBob2.Close()
 
@@ -1557,7 +1561,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 	_, err = mockBob2.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Resend the 3 events for tickOld (these will be deduplicated - already in storage)
+	// Resend the 3 events for tickOld (no dedup — re-processed and overwritten in storage)
 	var logsOld []bob.LogPayload
 	for i := uint64(1); i <= 3; i++ {
 		logsOld = append(logsOld, CreateLogPayloadWithTimestamp(145, tickOld, i, 0, map[string]any{
@@ -1575,7 +1579,7 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Now send 2 events for tickNew (these should get index 0, 1 - NOT 3, 4)
+	// Now send 2 events for tickNew (these should get index 0, 1)
 	var logsNew []bob.LogPayload
 	for i := uint64(4); i <= 5; i++ {
 		logsNew = append(logsNew, CreateLogPayloadWithTimestamp(145, tickNew, i, 0, map[string]any{
@@ -1600,14 +1604,20 @@ func TestE2E_IndexResetAfterDeduplication(t *testing.T) {
 		return len(events) >= 2
 	}, "2 events should be stored for tickNew")
 
-	// Verify that tickNew events have indexes 0 and 1 in Kafka (NOT 3 and 4)
+	// Resent tickOld events (3) + tickNew events (2) = 5 total Kafka messages
 	msgs := mockKafka2.Messages()
-	require.Len(t, msgs, 2, "Only 2 new events should be published to Kafka (tickOld events were deduplicated)")
+	require.Len(t, msgs, 5, "3 resent + 2 new events should be published to Kafka")
 
-	// The events should have index 0 and 1 for tickNew
-	for i, msg := range msgs {
-		require.Equal(t, uint64(i), msg.Index, "tickNew event %d should have index %d, not %d", i, i, msg.Index)
-		require.Equal(t, tickNew, msg.TickNumber, "Event should be for tickNew")
+	// tickNew events should have index 0 and 1 (tick boundary resets the index)
+	tickNewMsgs := make([]*kafka.EventMessage, 0)
+	for _, msg := range msgs {
+		if msg.TickNumber == tickNew {
+			tickNewMsgs = append(tickNewMsgs, msg)
+		}
+	}
+	require.Len(t, tickNewMsgs, 2)
+	for i, msg := range tickNewMsgs {
+		require.Equal(t, uint64(i), msg.Index, "tickNew event %d should have index %d", i, i)
 	}
 
 	// Also verify storage IndexInTick values
@@ -1704,8 +1714,8 @@ func TestE2E_NotificationsBeforeSubscribeResponse(t *testing.T) {
 	require.Equal(t, uint64(2), resp2.Events[0].LogId)
 }
 
-// TestE2E_KafkaDeduplication tests that deduplicated events are NOT published to Kafka
-func TestE2E_KafkaDeduplication(t *testing.T) {
+// TestE2E_KafkaResend tests that resent events ARE published to Kafka (no dedup)
+func TestE2E_KafkaResend(t *testing.T) {
 	tempDir := t.TempDir()
 	tick := uint32(22000001)
 
@@ -1754,7 +1764,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		_ = storageMgr.Close()
 	}()
 
-	// Phase 2: Restart and resend the same event — should be deduplicated
+	// Phase 2: Restart and resend the same event — now re-published to Kafka
 	mockBob2 := NewMockBobServer(145, 22000000)
 	defer mockBob2.Close()
 
@@ -1776,7 +1786,7 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 	_, err = mockBob2.WaitForSubscription(5 * time.Second)
 	require.NoError(t, err)
 
-	// Resend the same event (bob resends on reconnect)
+	// Resend the same event (bob resends on reconnect — no dedup)
 	payload := CreateLogPayloadWithTimestamp(145, tick, 1, 0, map[string]any{
 		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
@@ -1813,8 +1823,9 @@ func TestE2E_KafkaDeduplication(t *testing.T) {
 		return exists
 	}, "new event should be stored")
 
-	// Verify only the new event was published to Kafka (duplicate was skipped)
+	// Both resent and new events should be published to Kafka (no dedup)
 	msgs := mockKafka2.Messages()
-	require.Len(t, msgs, 1, "Only non-duplicate event should be published to Kafka")
-	assert.Equal(t, uint64(2), msgs[0].LogID, "Only the new event should be published")
+	require.Len(t, msgs, 2, "Both resent and new events should be published to Kafka")
+	assert.Equal(t, uint64(1), msgs[0].LogID, "Resent event should be published")
+	assert.Equal(t, uint64(2), msgs[1].LogID, "New event should be published")
 }

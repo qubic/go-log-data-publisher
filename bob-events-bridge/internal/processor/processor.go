@@ -306,8 +306,16 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		p.tickForIndex = result.Tick
 	}
 
+	// Find last OK log index for setting lastLogForTick flag
+	lastOKIdx := -1
+	for i, log := range result.Logs {
+		if log.OK {
+			lastOKIdx = i
+		}
+	}
+
 	// Process each log in the tick
-	for _, payload := range result.Logs {
+	for i, payload := range result.Logs {
 		if !payload.OK {
 			p.logger.Debug("Skipping non-OK log message")
 			p.metrics.IncProcessorEventsSkippedNonOK()
@@ -316,18 +324,7 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 
 		p.metrics.IncProcessorEventsReceived(payload.Type)
 
-		// Deduplication check: skip if we already have this event
-		exists, err := p.storage.HasEvent(p.currentEpoch, payload.Tick, payload.LogID)
-		if err != nil {
-			p.logger.Warn("Failed to check for duplicate event", zap.Error(err))
-		} else if exists {
-			p.logger.Debug("Skipping duplicate event",
-				zap.Uint64("logID", payload.LogID),
-				zap.Uint32("tick", payload.Tick),
-				zap.Uint32("type", payload.Type))
-			p.metrics.IncProcessorEventsDeduplicated(payload.Type)
-			continue
-		}
+		isLastLog := i == lastOKIdx
 
 		// Validate and parse body into typed struct
 		parsed, err := bob.ParseEventBody(payload.Type, payload.Body)
@@ -352,7 +349,7 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		// Build kafka message (if publisher configured)
 		var kafkaMsg *kafka.EventMessage
 		if p.publisher != nil {
-			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex)
+			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex, isLastLog)
 			if err != nil {
 				return fmt.Errorf("failed to build kafka message: %w", err)
 			}
@@ -360,15 +357,16 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 
 		// Create event proto
 		event := &eventsbridge.Event{
-			LogId:       payload.LogID,
-			Tick:        payload.Tick,
-			Epoch:       uint32(payload.Epoch),
-			EventType:   payload.Type,
-			TxHash:      payload.TxHash,
-			Timestamp:   payload.Timestamp,
-			Body:        bodyStruct,
-			IndexInTick: p.tickEventIndex,
-			LogDigest:   payload.LogDigest,
+			LogId:          payload.LogID,
+			Tick:           payload.Tick,
+			Epoch:          uint32(payload.Epoch),
+			EventType:      payload.Type,
+			TxHash:         payload.TxHash,
+			Timestamp:      payload.Timestamp,
+			Body:           bodyStruct,
+			IndexInTick:    p.tickEventIndex,
+			LogDigest:      payload.LogDigest,
+			LastLogForTick: isLastLog,
 		}
 
 		// Initialize batch if nil

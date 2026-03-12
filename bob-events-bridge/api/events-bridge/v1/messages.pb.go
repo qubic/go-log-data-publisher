@@ -24,18 +24,19 @@ const (
 
 // Event represents a single event from the bob node
 type Event struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LogId         uint64                 `protobuf:"varint,1,opt,name=log_id,json=logId,proto3" json:"log_id,omitempty"`
-	Tick          uint32                 `protobuf:"varint,2,opt,name=tick,proto3" json:"tick,omitempty"`
-	Epoch         uint32                 `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	EventType     uint32                 `protobuf:"varint,4,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
-	TxHash        string                 `protobuf:"bytes,5,opt,name=tx_hash,json=txHash,proto3" json:"tx_hash,omitempty"`
-	Timestamp     uint64                 `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Body          *structpb.Struct       `protobuf:"bytes,7,opt,name=body,proto3" json:"body,omitempty"`
-	IndexInTick   uint32                 `protobuf:"varint,8,opt,name=index_in_tick,json=indexInTick,proto3" json:"index_in_tick,omitempty"`
-	LogDigest     string                 `protobuf:"bytes,9,opt,name=log_digest,json=logDigest,proto3" json:"log_digest,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	LogId          uint64                 `protobuf:"varint,1,opt,name=log_id,json=logId,proto3" json:"log_id,omitempty"`
+	Tick           uint32                 `protobuf:"varint,2,opt,name=tick,proto3" json:"tick,omitempty"`
+	Epoch          uint32                 `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	EventType      uint32                 `protobuf:"varint,4,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	TxHash         string                 `protobuf:"bytes,5,opt,name=tx_hash,json=txHash,proto3" json:"tx_hash,omitempty"`
+	Timestamp      uint64                 `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Body           *structpb.Struct       `protobuf:"bytes,7,opt,name=body,proto3" json:"body,omitempty"`
+	IndexInTick    uint32                 `protobuf:"varint,8,opt,name=index_in_tick,json=indexInTick,proto3" json:"index_in_tick,omitempty"`
+	LogDigest      string                 `protobuf:"bytes,9,opt,name=log_digest,json=logDigest,proto3" json:"log_digest,omitempty"`
+	LastLogForTick bool                   `protobuf:"varint,10,opt,name=last_log_for_tick,json=lastLogForTick,proto3" json:"last_log_for_tick,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Event) Reset() {
@@ -129,6 +130,13 @@ func (x *Event) GetLogDigest() string {
 		return x.LogDigest
 	}
 	return ""
+}
+
+func (x *Event) GetLastLogForTick() bool {
+	if x != nil {
+		return x.LastLogForTick
+	}
+	return false
 }
 
 // TickInterval represents a range of ticks
@@ -424,7 +432,7 @@ var File_messages_proto protoreflect.FileDescriptor
 
 const file_messages_proto_rawDesc = "" +
 	"\n" +
-	"\x0emessages.proto\x12\x10events_bridge.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x8e\x02\n" +
+	"\x0emessages.proto\x12\x10events_bridge.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xb9\x02\n" +
 	"\x05Event\x12\x15\n" +
 	"\x06log_id\x18\x01 \x01(\x04R\x05logId\x12\x12\n" +
 	"\x04tick\x18\x02 \x01(\rR\x04tick\x12\x14\n" +
@@ -436,7 +444,9 @@ const file_messages_proto_rawDesc = "" +
 	"\x04body\x18\a \x01(\v2\x17.google.protobuf.StructR\x04body\x12\"\n" +
 	"\rindex_in_tick\x18\b \x01(\rR\vindexInTick\x12\x1d\n" +
 	"\n" +
-	"log_digest\x18\t \x01(\tR\tlogDigest\"J\n" +
+	"log_digest\x18\t \x01(\tR\tlogDigest\x12)\n" +
+	"\x11last_log_for_tick\x18\n" +
+	" \x01(\bR\x0elastLogForTick\"J\n" +
 	"\fTickInterval\x12\x1d\n" +
 	"\n" +
 	"first_tick\x18\x01 \x01(\rR\tfirstTick\x12\x1b\n" +

@@ -3,7 +3,7 @@ name: Deploy bob-events-bridge prod images to GHCR
 on:
   push:
     branches:
-      - 17-bridge-address-bob-wslogs-removed-endpoint
+      - 25-bob-events-bridge-add-last-log-flag
     paths:
       - 'bob-events-bridge/**'
 
@@ -44,4 +44,4 @@ jobs:
           context: ./bob-events-bridge
           file: ./bob-events-bridge/Dockerfile
           push: true
-          tags: ghcr.io/qubic/bob-events-bridge:dev
+          tags: ghcr.io/qubic/bob-events-bridge:25-bob-events-bridge-add-last-log-flag
