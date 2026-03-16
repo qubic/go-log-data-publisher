@@ -379,11 +379,38 @@ Every event published to Kafka follows this envelope structure:
 }
 ```
 
-#### Types 9–12 — hex-encoded events (dust_burning, spectrum_stats, asset_ownership_managing_contract_change, asset_possession_managing_contract_change)
+#### Types 9–10 — hex-encoded events (dust_burning, spectrum_stats)
 
 ```json
 {
   "hex": "deadbeef0123456789abcdef"
+}
+```
+
+#### Type 11 — asset_ownership_managing_contract_change
+
+```json
+{
+  "owner": "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "assetIssuer": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "sourceContractIndex": 1,
+  "destinationContractIndex": 2,
+  "numberOfShares": 500,
+  "assetName": "QX"
+}
+```
+
+#### Type 12 — asset_possession_managing_contract_change
+
+```json
+{
+  "possessor": "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "owner": "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "assetIssuer": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "sourceContractIndex": 3,
+  "destinationContractIndex": 4,
+  "numberOfShares": 750,
+  "assetName": "CFB"
 }
 ```
 

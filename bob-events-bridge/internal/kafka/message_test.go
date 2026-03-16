@@ -170,6 +170,60 @@ func TestTransformEventBody_ContractMessage(t *testing.T) {
 	}
 }
 
+func TestTransformEventBody_AssetOwnershipManagingContractChange(t *testing.T) {
+	body := &bob.AssetOwnershipManagingContractChangeBody{
+		OwnershipPublicKey:       "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		IssuerPublicKey:          "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		SourceContractIndex:      1,
+		DestinationContractIndex: 2,
+		NumberOfShares:           500,
+		AssetName:                "QX",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeAssetOwnershipManagingContractChange, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"owner":                    "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetIssuer":              "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"sourceContractIndex":      uint32(1),
+		"destinationContractIndex": uint32(2),
+		"numberOfShares":           int64(500),
+		"assetName":                "QX",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTransformEventBody_AssetPossessionManagingContractChange(t *testing.T) {
+	body := &bob.AssetPossessionManagingContractChangeBody{
+		PossessionPublicKey:      "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		OwnershipPublicKey:       "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		IssuerPublicKey:          "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		SourceContractIndex:      3,
+		DestinationContractIndex: 4,
+		NumberOfShares:           750,
+		AssetName:                "CFB",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeAssetPossessionManagingContractChange, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"possessor":                "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"owner":                    "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"assetIssuer":              "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"sourceContractIndex":      uint32(3),
+		"destinationContractIndex": uint32(4),
+		"numberOfShares":           int64(750),
+		"assetName":                "CFB",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTransformEventBody_HexBody(t *testing.T) {
 	body := &bob.HexBody{
 		Hex: "deadbeef0123456789abcdef",
