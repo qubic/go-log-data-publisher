@@ -813,7 +813,7 @@ func TestLogEvent_ToLogEventElastic_AssetOwnershipManagingContractChange_Success
 		Body: map[string]any{
 			"assetName":                "QFT",
 			"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
-			"ownershipPublicKey":       "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+			"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
 			"numberOfShares":           3.0,
 			"sourceContractIndex":      1.0,
 			"destinationContractIndex": 2.0,
@@ -844,8 +844,8 @@ func TestLogEvent_ToLogEventElastic_AssetPossessionManagingContractChange_Succes
 		Body: map[string]any{
 			"assetName":                "QFT",
 			"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
-			"ownershipPublicKey":       "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
-			"possessionPublicKey":      "BIWLXVCUXYLOQDANJVESJVABISGCNURGYTXMEJTCHBBOEMNZUJQKPPECMBDO",
+			"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+			"possessor":                "BIWLXVCUXYLOQDANJVESJVABISGCNURGYTXMEJTCHBBOEMNZUJQKPPECMBDO",
 			"numberOfShares":           3.0,
 			"sourceContractIndex":      1.0,
 			"destinationContractIndex": 2.0,
@@ -876,7 +876,7 @@ func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing
 			logType: 11,
 			body: map[string]any{
 				"assetName":                "QFT",
-				"ownershipPublicKey":       "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
 				"numberOfShares":           3.0,
 				"sourceContractIndex":      1.0,
 				"destinationContractIndex": 2.0,
@@ -888,7 +888,7 @@ func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing
 			logType: 11,
 			body: map[string]any{
 				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
-				"ownershipPublicKey":       "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
 				"numberOfShares":           3.0,
 				"sourceContractIndex":      1.0,
 				"destinationContractIndex": 2.0,
@@ -913,7 +913,7 @@ func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing
 			body: map[string]any{
 				"assetName":                "QFT",
 				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
-				"ownershipPublicKey":       "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
 				"sourceContractIndex":      1.0,
 				"destinationContractIndex": 2.0,
 			},
@@ -925,7 +925,7 @@ func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing
 			body: map[string]any{
 				"assetName":                "QFT",
 				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
-				"ownershipPublicKey":       "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
 				"numberOfShares":           3.0,
 				"destinationContractIndex": 2.0,
 			},
@@ -937,7 +937,7 @@ func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing
 			body: map[string]any{
 				"assetName":           "QFT",
 				"assetIssuer":         "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
-				"ownershipPublicKey":  "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"owner":               "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
 				"numberOfShares":      3.0,
 				"sourceContractIndex": 1.0,
 			},
@@ -949,7 +949,7 @@ func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing
 			body: map[string]any{
 				"assetName":                "QFT",
 				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
-				"ownershipPublicKey":       "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
 				"numberOfShares":           3.0,
 				"sourceContractIndex":      1.0,
 				"destinationContractIndex": 2.0,

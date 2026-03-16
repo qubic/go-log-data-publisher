@@ -348,14 +348,14 @@ func handleAssetManagementTransfer(lee *LogEventElastic, body map[string]any, po
 	}
 	lee.DestinationContractIndex, err = toUint64(destinationContractIndex)
 
-	owner, ok := body["ownershipPublicKey"].(string)
+	owner, ok := body["owner"].(string)
 	if !ok {
 		return fmt.Errorf("missing or invalid owner public key")
 	}
 	lee.Owner = owner
 
 	if possession {
-		possessor, ok := body["possessionPublicKey"].(string)
+		possessor, ok := body["possessor"].(string)
 		if !ok {
 			return fmt.Errorf("missing or invalid possessor public key")
 		}
