@@ -21,6 +21,7 @@ import (
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
 	"github.com/qubic/log-events-consumer/status"
+	"github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/plugin/kprom"
 )
@@ -51,6 +52,18 @@ func run() error {
 			ConsumeTopic     string   `conf:"default:qubic-log-events-data"`
 			ConsumerGroup    string   `conf:"default:qubic-elastic"`
 		}
+		Redis struct {
+			SentinelAddrs    []string      `conf:"default:localhost:26379"` // format: "host:port"
+			MasterName       string        `conf:"default:qubic-master"`
+			Password         string        `conf:"optional,mask"`
+			SentinelPassword string        `conf:"optional,mask"`
+			DB               int           `conf:"default:0"`
+			PoolSize         int           `conf:"default:3"`
+			DialTimeout      time.Duration `conf:"default:10s"`
+			ReadTimeout      time.Duration `conf:"default:10s"`
+			WriteTimeout     time.Duration `conf:"default:10s"`
+			Enabled          bool          `conf:"default:true"`
+		}
 		Metrics struct {
 			Port      int    `conf:"default:9999"`
 			Namespace string `conf:"default:qubic_kafka"`
@@ -60,6 +73,21 @@ func run() error {
 			SupportedLogTypes string
 		}
 	}
+
+	// this client sends read requests to slave nodes
+	_ = redis.NewFailoverClusterClient(&redis.FailoverOptions{
+		MasterName:       cfg.Redis.MasterName,
+		SentinelAddrs:    cfg.Redis.SentinelAddrs,
+		SentinelPassword: cfg.Redis.SentinelPassword,
+		Password:         cfg.Redis.Password,
+		DB:               cfg.Redis.DB,
+		DialTimeout:      cfg.Redis.DialTimeout,
+		ReadTimeout:      cfg.Redis.ReadTimeout,
+		WriteTimeout:     cfg.Redis.WriteTimeout,
+		PoolSize:         cfg.Redis.PoolSize,
+		// To route commands by latency or randomly, enable one of the following.
+		RouteByLatency: true,
+	})
 
 	// Parsing of the default value didn't work properly. We manually set the default.
 	if cfg.Base.SupportedLogTypes == "" {
