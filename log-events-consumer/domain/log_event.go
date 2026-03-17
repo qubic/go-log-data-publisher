@@ -136,7 +136,8 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		}
 
 	case 11, 12:
-		err = handleAssetManagementTransfer(&lee, le.Body, lee.LogType == 12)
+		isPossessionTransfer := lee.LogType == 12
+		err = handleAssetManagementTransfer(&lee, le.Body, isPossessionTransfer)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling asset management transfer: %w", err)
 		}
@@ -312,7 +313,7 @@ func handleAssetTransfer(lee *LogEventElastic, body map[string]any) error {
 	return nil
 }
 
-func handleAssetManagementTransfer(lee *LogEventElastic, body map[string]any, possession bool) error {
+func handleAssetManagementTransfer(lee *LogEventElastic, body map[string]any, isPossessionTransfer bool) error {
 	var err error
 
 	assetIssuer, ok := body["assetIssuer"].(string)
@@ -354,7 +355,7 @@ func handleAssetManagementTransfer(lee *LogEventElastic, body map[string]any, po
 	}
 	lee.Owner = owner
 
-	if possession {
+	if isPossessionTransfer {
 		possessor, ok := body["possessor"].(string)
 		if !ok {
 			return fmt.Errorf("missing or invalid possessor public key")
