@@ -129,10 +129,17 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 			return LogEventElastic{}, fmt.Errorf("handling burn: %w", err)
 		}
 
-	case 9, 10, 11, 12: // raw payload only
+	case 9, 10: // raw payload only
 		err = handleRaw(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling raw event with type [%d]: %w", lee.LogType, err)
+		}
+
+	case 11, 12:
+		isPossessionTransfer := lee.LogType == 12
+		err = handleAssetManagementTransfer(&lee, le.Body, isPossessionTransfer)
+		if err != nil {
+			return LogEventElastic{}, fmt.Errorf("handling asset management transfer: %w", err)
 		}
 
 	case 13:
@@ -301,6 +308,59 @@ func handleAssetTransfer(lee *LogEventElastic, body map[string]any) error {
 	lee.NumberOfShares, err = toUint64(nos)
 	if err != nil {
 		return fmt.Errorf("converting number of shares: %w", err)
+	}
+
+	return nil
+}
+
+func handleAssetManagementTransfer(lee *LogEventElastic, body map[string]any, isPossessionTransfer bool) error {
+	var err error
+
+	assetIssuer, ok := body["assetIssuer"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid asset issuer")
+	}
+	lee.AssetIssuer = assetIssuer
+
+	assetName, ok := body["assetName"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid asset name")
+	}
+	lee.AssetName = assetName
+
+	nos, ok := body["numberOfShares"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid number of shares")
+	}
+	lee.NumberOfShares, err = toUint64(nos)
+	if err != nil {
+		return fmt.Errorf("converting number of shares: %w", err)
+	}
+
+	sourceContractIndex, ok := body["sourceContractIndex"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid source contract index")
+	}
+	lee.SourceContractIndex, err = toUint64(sourceContractIndex)
+
+	destinationContractIndex, ok := body["destinationContractIndex"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid destination contract index")
+	}
+	lee.DestinationContractIndex, err = toUint64(destinationContractIndex)
+
+	owner, ok := body["owner"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid owner public key")
+	}
+	lee.Owner = owner
+
+	if isPossessionTransfer {
+		possessor, ok := body["possessor"].(string)
+		if !ok {
+			return fmt.Errorf("missing or invalid possessor public key")
+		}
+		lee.Possessor = possessor
 	}
 
 	return nil

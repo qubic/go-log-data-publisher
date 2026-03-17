@@ -745,18 +745,6 @@ func TestLogEvent_ToLogEventElastic_RawTypes(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "Type 11 - Valid raw payload",
-			logType:  11,
-			hexValue: "decafbad",
-			wantErr:  false,
-		},
-		{
-			name:     "Type 12 - Valid raw payload",
-			logType:  12,
-			hexValue: "feedface",
-			wantErr:  false,
-		},
-		{
 			name:     "Type 9 - Missing hex field",
 			logType:  9,
 			hexValue: "",
@@ -771,8 +759,8 @@ func TestLogEvent_ToLogEventElastic_RawTypes(t *testing.T) {
 			errMsg:   "converting hex to raw payload",
 		},
 		{
-			name:     "Type 11 - Odd length hex",
-			logType:  11,
+			name:     "Type 9 - Odd length hex",
+			logType:  9,
 			hexValue: "abc",
 			wantErr:  true,
 			errMsg:   "converting hex to raw payload",
@@ -809,6 +797,183 @@ func TestLogEvent_ToLogEventElastic_RawTypes(t *testing.T) {
 				assert.NotNil(t, lee.RawPayload)
 				assert.Greater(t, len(lee.RawPayload), 0)
 			}
+		})
+	}
+}
+
+func TestLogEvent_ToLogEventElastic_AssetOwnershipManagingContractChange_Success(t *testing.T) {
+	le := LogEvent{
+		Epoch:           202,
+		TickNumber:      44712269,
+		Timestamp:       1772042426,
+		TransactionHash: validTxHash,
+		LogId:           339847,
+		LogDigest:       "0b2bd4c75e75f295",
+		Type:            11,
+		Body: map[string]any{
+			"assetName":                "QFT",
+			"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+			"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+			"numberOfShares":           3.0,
+			"sourceContractIndex":      1.0,
+			"destinationContractIndex": 2.0,
+		},
+	}
+
+	lee, err := le.ToLogEventElastic()
+	require.NoError(t, err)
+
+	assert.Equal(t, "QFT", lee.AssetName)
+	assert.Equal(t, "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG", lee.AssetIssuer)
+	assert.Equal(t, "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD", lee.Owner)
+	assert.Equal(t, uint64(3), *lee.NumberOfShares)
+	assert.Equal(t, uint64(1), *lee.SourceContractIndex)
+	assert.Equal(t, uint64(2), *lee.DestinationContractIndex)
+	assert.Empty(t, lee.Possessor)
+}
+
+func TestLogEvent_ToLogEventElastic_AssetPossessionManagingContractChange_Success(t *testing.T) {
+	le := LogEvent{
+		Epoch:           202,
+		TickNumber:      44797676,
+		Timestamp:       1772175245,
+		TransactionHash: validTxHash,
+		LogId:           2473159,
+		LogDigest:       "42c9ac969bcb7735",
+		Type:            12,
+		Body: map[string]any{
+			"assetName":                "QFT",
+			"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+			"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+			"possessor":                "BIWLXVCUXYLOQDANJVESJVABISGCNURGYTXMEJTCHBBOEMNZUJQKPPECMBDO",
+			"numberOfShares":           3.0,
+			"sourceContractIndex":      1.0,
+			"destinationContractIndex": 2.0,
+		},
+	}
+
+	lee, err := le.ToLogEventElastic()
+	require.NoError(t, err)
+
+	assert.Equal(t, "QFT", lee.AssetName)
+	assert.Equal(t, "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG", lee.AssetIssuer)
+	assert.Equal(t, "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD", lee.Owner)
+	assert.Equal(t, "BIWLXVCUXYLOQDANJVESJVABISGCNURGYTXMEJTCHBBOEMNZUJQKPPECMBDO", lee.Possessor)
+	assert.Equal(t, uint64(3), *lee.NumberOfShares)
+	assert.Equal(t, uint64(1), *lee.SourceContractIndex)
+	assert.Equal(t, uint64(2), *lee.DestinationContractIndex)
+}
+
+func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing.T) {
+	tests := []struct {
+		name    string
+		logType int16
+		body    map[string]any
+		errMsg  string
+	}{
+		{
+			name:    "Missing asset issuer",
+			logType: 11,
+			body: map[string]any{
+				"assetName":                "QFT",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"numberOfShares":           3.0,
+				"sourceContractIndex":      1.0,
+				"destinationContractIndex": 2.0,
+			},
+			errMsg: "missing or invalid asset issuer",
+		},
+		{
+			name:    "Missing asset name",
+			logType: 11,
+			body: map[string]any{
+				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"numberOfShares":           3.0,
+				"sourceContractIndex":      1.0,
+				"destinationContractIndex": 2.0,
+			},
+			errMsg: "missing or invalid asset name",
+		},
+		{
+			name:    "Missing ownership public key",
+			logType: 11,
+			body: map[string]any{
+				"assetName":                "QFT",
+				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+				"numberOfShares":           3.0,
+				"sourceContractIndex":      1.0,
+				"destinationContractIndex": 2.0,
+			},
+			errMsg: "missing or invalid owner public key",
+		},
+		{
+			name:    "Missing number of shares",
+			logType: 11,
+			body: map[string]any{
+				"assetName":                "QFT",
+				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"sourceContractIndex":      1.0,
+				"destinationContractIndex": 2.0,
+			},
+			errMsg: "missing or invalid number of shares",
+		},
+		{
+			name:    "Missing source contract index",
+			logType: 11,
+			body: map[string]any{
+				"assetName":                "QFT",
+				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"numberOfShares":           3.0,
+				"destinationContractIndex": 2.0,
+			},
+			errMsg: "missing or invalid source contract index",
+		},
+		{
+			name:    "Missing destination contract index",
+			logType: 11,
+			body: map[string]any{
+				"assetName":           "QFT",
+				"assetIssuer":         "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+				"owner":               "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"numberOfShares":      3.0,
+				"sourceContractIndex": 1.0,
+			},
+			errMsg: "missing or invalid destination contract index",
+		},
+		{
+			name:    "Missing possession public key",
+			logType: 12,
+			body: map[string]any{
+				"assetName":                "QFT",
+				"assetIssuer":              "TFUYVBXYIYBVTEMJHAJGEJOOZHJBQFVQLTBBKMEHPEVIZFXZRPEYFUWGTIWG",
+				"owner":                    "NBRFOZHKJXSVCECWAWQJWYJDDWGAPKSCDIWRTEFLTAWHRBFAYCCOAXDFCBMD",
+				"numberOfShares":           3.0,
+				"sourceContractIndex":      1.0,
+				"destinationContractIndex": 2.0,
+			},
+			errMsg: "missing or invalid possessor public key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			le := LogEvent{
+				Epoch:           202,
+				TickNumber:      44712269,
+				Timestamp:       1772042426,
+				TransactionHash: validTxHash,
+				LogId:           339847,
+				LogDigest:       "0b2bd4c75e75f295",
+				Type:            tt.logType,
+				Body:            tt.body,
+			}
+
+			_, err := le.ToLogEventElastic()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.errMsg)
 		})
 	}
 }
