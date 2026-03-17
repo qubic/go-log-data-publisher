@@ -145,14 +145,61 @@ func TestParseEventBody_ContractMessage(t *testing.T) {
 	}
 }
 
+func TestParseEventBody_AssetOwnershipManagingContractChange(t *testing.T) {
+	body := json.RawMessage(`{
+		"ownershipPublicKey": "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"issuerPublicKey": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"sourceContractIndex": 1,
+		"destinationContractIndex": 2,
+		"numberOfShares": 500,
+		"assetName": "QX"
+	}`)
+
+	result, err := ParseEventBody(LogTypeAssetOwnershipManagingContractChange, body)
+	require.NoError(t, err)
+
+	parsed, ok := result.(*AssetOwnershipManagingContractChangeBody)
+	require.True(t, ok)
+	assert.Equal(t, "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.OwnershipPublicKey)
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.IssuerPublicKey)
+	assert.Equal(t, uint32(1), parsed.SourceContractIndex)
+	assert.Equal(t, uint32(2), parsed.DestinationContractIndex)
+	assert.Equal(t, int64(500), parsed.NumberOfShares)
+	assert.Equal(t, "QX", parsed.AssetName)
+}
+
+func TestParseEventBody_AssetPossessionManagingContractChange(t *testing.T) {
+	body := json.RawMessage(`{
+		"possessionPublicKey": "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"ownershipPublicKey": "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"issuerPublicKey": "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"sourceContractIndex": 3,
+		"destinationContractIndex": 4,
+		"numberOfShares": 750,
+		"assetName": "CFB"
+	}`)
+
+	result, err := ParseEventBody(LogTypeAssetPossessionManagingContractChange, body)
+	require.NoError(t, err)
+
+	parsed, ok := result.(*AssetPossessionManagingContractChangeBody)
+	require.True(t, ok)
+	assert.Equal(t, "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.PossessionPublicKey)
+	assert.Equal(t, "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.OwnershipPublicKey)
+	assert.Equal(t, "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.IssuerPublicKey)
+	assert.Equal(t, uint32(3), parsed.SourceContractIndex)
+	assert.Equal(t, uint32(4), parsed.DestinationContractIndex)
+	assert.Equal(t, int64(750), parsed.NumberOfShares)
+	assert.Equal(t, "CFB", parsed.AssetName)
+}
+
 func TestParseEventBody_HexBody(t *testing.T) {
 	body := json.RawMessage(`{
 		"hex": "deadbeef0123456789abcdef"
 	}`)
 
-	// Test for all hex types (9, 10, 11, 12)
-	for _, logType := range []uint32{LogTypeDustBurning, LogTypeSpectrumStats,
-		LogTypeAssetOwnershipManagingContractChange, LogTypeAssetPossessionManagingContractChange} {
+	// Test for hex types (9, 10)
+	for _, logType := range []uint32{LogTypeDustBurning, LogTypeSpectrumStats} {
 		result, err := ParseEventBody(logType, body)
 		require.NoError(t, err, "logType %d", logType)
 

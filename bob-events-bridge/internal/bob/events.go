@@ -98,7 +98,28 @@ type ContractMessageBody struct {
 	Content   string `json:"content"`
 }
 
-// HexBody represents the body of hex-encoded events (log types 9, 10, 11, 12) and the default for unknown types
+// AssetOwnershipManagingContractChangeBody represents the body of an asset_ownership_managing_contract_change event (log type 11)
+type AssetOwnershipManagingContractChangeBody struct {
+	OwnershipPublicKey       string `json:"ownershipPublicKey"`
+	IssuerPublicKey          string `json:"issuerPublicKey"`
+	SourceContractIndex      uint32 `json:"sourceContractIndex"`
+	DestinationContractIndex uint32 `json:"destinationContractIndex"`
+	NumberOfShares           int64  `json:"numberOfShares"`
+	AssetName                string `json:"assetName"`
+}
+
+// AssetPossessionManagingContractChangeBody represents the body of an asset_possession_managing_contract_change event (log type 12)
+type AssetPossessionManagingContractChangeBody struct {
+	PossessionPublicKey      string `json:"possessionPublicKey"`
+	OwnershipPublicKey       string `json:"ownershipPublicKey"`
+	IssuerPublicKey          string `json:"issuerPublicKey"`
+	SourceContractIndex      uint32 `json:"sourceContractIndex"`
+	DestinationContractIndex uint32 `json:"destinationContractIndex"`
+	NumberOfShares           int64  `json:"numberOfShares"`
+	AssetName                string `json:"assetName"`
+}
+
+// HexBody represents the body of hex-encoded events (log types 9, 10) and the default for unknown types
 type HexBody struct {
 	Hex string `json:"hex"`
 }
@@ -131,8 +152,11 @@ func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 		target = &ContractMessageBody{}
 	case LogTypeBurning:
 		target = &BurningBody{}
-	case LogTypeDustBurning, LogTypeSpectrumStats,
-		LogTypeAssetOwnershipManagingContractChange, LogTypeAssetPossessionManagingContractChange:
+	case LogTypeAssetOwnershipManagingContractChange:
+		target = &AssetOwnershipManagingContractChangeBody{}
+	case LogTypeAssetPossessionManagingContractChange:
+		target = &AssetPossessionManagingContractChangeBody{}
+	case LogTypeDustBurning, LogTypeSpectrumStats:
 		target = &HexBody{}
 	case LogTypeContractReserveDeduction:
 		target = &ContractReserveDeductionBody{}

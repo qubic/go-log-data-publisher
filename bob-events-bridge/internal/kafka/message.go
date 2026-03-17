@@ -85,6 +85,27 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 			"content":   b.Content,
 		}, nil
 
+	case *bob.AssetOwnershipManagingContractChangeBody:
+		return map[string]any{
+			"owner":                    b.OwnershipPublicKey,
+			"assetIssuer":              b.IssuerPublicKey,
+			"sourceContractIndex":      b.SourceContractIndex,
+			"destinationContractIndex": b.DestinationContractIndex,
+			"numberOfShares":           b.NumberOfShares,
+			"assetName":                b.AssetName,
+		}, nil
+
+	case *bob.AssetPossessionManagingContractChangeBody:
+		return map[string]any{
+			"possessor":                b.PossessionPublicKey,
+			"owner":                    b.OwnershipPublicKey,
+			"assetIssuer":              b.IssuerPublicKey,
+			"sourceContractIndex":      b.SourceContractIndex,
+			"destinationContractIndex": b.DestinationContractIndex,
+			"numberOfShares":           b.NumberOfShares,
+			"assetName":                b.AssetName,
+		}, nil
+
 	case *bob.HexBody:
 		return map[string]any{
 			"hex": b.Hex,

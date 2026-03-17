@@ -567,6 +567,140 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	require.Equal(t, "test-digest", event.LogDigest)
 }
 
+// TestE2E_QueryAssetOwnershipManagingContractChange tests the full flow for type 11 events
+func TestE2E_QueryAssetOwnershipManagingContractChange(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	cfg := CreateTestConfig(mockBob, tempDir)
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	body := map[string]any{
+		"ownershipPublicKey":       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"issuerPublicKey":          "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"sourceContractIndex":      1,
+		"destinationContractIndex": 2,
+		"numberOfShares":           500,
+		"assetName":                "QX",
+	}
+
+	payload := CreateLogPayload(145, 22000001, 1, 11, body)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
+	require.NoError(t, err)
+	mockBob.SendCatchUpComplete()
+
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		exists, _ := storageMgr.HasEvent(145, 22000001, 1)
+		return exists
+	}, "event should be stored")
+
+	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
+	resp, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: 22000001})
+	require.NoError(t, err)
+	require.Len(t, resp.Events, 1)
+
+	event := resp.Events[0]
+	require.Equal(t, uint32(11), event.EventType)
+	require.NotNil(t, event.GetBody())
+
+	bodyFields := event.GetBody().GetFields()
+	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", bodyFields["ownershipPublicKey"].GetStringValue())
+	require.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", bodyFields["issuerPublicKey"].GetStringValue())
+	require.Equal(t, float64(1), bodyFields["sourceContractIndex"].GetNumberValue())
+	require.Equal(t, float64(2), bodyFields["destinationContractIndex"].GetNumberValue())
+	require.Equal(t, float64(500), bodyFields["numberOfShares"].GetNumberValue())
+	require.Equal(t, "QX", bodyFields["assetName"].GetStringValue())
+}
+
+// TestE2E_QueryAssetPossessionManagingContractChange tests the full flow for type 12 events
+func TestE2E_QueryAssetPossessionManagingContractChange(t *testing.T) {
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	require.NoError(t, err)
+
+	cfg := CreateTestConfig(mockBob, tempDir)
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), nil, newTestMetrics())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	body := map[string]any{
+		"possessionPublicKey":      "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+		"ownershipPublicKey":       "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+		"issuerPublicKey":          "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+		"sourceContractIndex":      3,
+		"destinationContractIndex": 4,
+		"numberOfShares":           750,
+		"assetName":                "CFB",
+	}
+
+	payload := CreateLogPayload(145, 22000001, 1, 12, body)
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    1,
+		FilteredLogs: 1,
+		Logs:         []bob.LogPayload{payload},
+	})
+	require.NoError(t, err)
+	mockBob.SendCatchUpComplete()
+
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		exists, _ := storageMgr.HasEvent(145, 22000001, 1)
+		return exists
+	}, "event should be stored")
+
+	service := grpc.NewEventsBridgeService(storageMgr, zap.NewNop())
+	resp, err := service.GetEventsForTick(ctx, &eventsbridge.GetEventsForTickRequest{Tick: 22000001})
+	require.NoError(t, err)
+	require.Len(t, resp.Events, 1)
+
+	event := resp.Events[0]
+	require.Equal(t, uint32(12), event.EventType)
+	require.NotNil(t, event.GetBody())
+
+	bodyFields := event.GetBody().GetFields()
+	require.Equal(t, "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", bodyFields["possessionPublicKey"].GetStringValue())
+	require.Equal(t, "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", bodyFields["ownershipPublicKey"].GetStringValue())
+	require.Equal(t, "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE", bodyFields["issuerPublicKey"].GetStringValue())
+	require.Equal(t, float64(3), bodyFields["sourceContractIndex"].GetNumberValue())
+	require.Equal(t, float64(4), bodyFields["destinationContractIndex"].GetNumberValue())
+	require.Equal(t, float64(750), bodyFields["numberOfShares"].GetNumberValue())
+	require.Equal(t, "CFB", bodyFields["assetName"].GetStringValue())
+}
+
 // TestE2E_NonOKLogsSkipped tests that logs with ok=false are not stored
 func TestE2E_NonOKLogsSkipped(t *testing.T) {
 	mockBob := NewMockBobServer(145, 22000000)
@@ -1319,13 +1453,28 @@ func TestE2E_LogType11_AssetOwnershipManagingContractChange(t *testing.T) {
 		name:      "asset_ownership_managing_contract_change",
 		eventType: 11,
 		bobBody: map[string]any{
-			"hex": "112233445566",
+			"ownershipPublicKey":       "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":          "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"sourceContractIndex":      1,
+			"destinationContractIndex": 2,
+			"numberOfShares":           500,
+			"assetName":                "QX",
 		},
 		grpcChecks: map[string]any{
-			"hex": "112233445566",
+			"ownershipPublicKey":       "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":          "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"sourceContractIndex":      float64(1),
+			"destinationContractIndex": float64(2),
+			"numberOfShares":           float64(500),
+			"assetName":                "QX",
 		},
 		kafkaChecks: map[string]any{
-			"hex": "112233445566",
+			"owner":                    "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetIssuer":              "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"sourceContractIndex":      uint32(1),
+			"destinationContractIndex": uint32(2),
+			"numberOfShares":           int64(500),
+			"assetName":                "QX",
 		},
 	})
 }
@@ -1335,13 +1484,31 @@ func TestE2E_LogType12_AssetPossessionManagingContractChange(t *testing.T) {
 		name:      "asset_possession_managing_contract_change",
 		eventType: 12,
 		bobBody: map[string]any{
-			"hex": "ffeeddccbbaa",
+			"possessionPublicKey":      "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"ownershipPublicKey":       "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":          "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"sourceContractIndex":      3,
+			"destinationContractIndex": 4,
+			"numberOfShares":           750,
+			"assetName":                "CFB",
 		},
 		grpcChecks: map[string]any{
-			"hex": "ffeeddccbbaa",
+			"possessionPublicKey":      "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"ownershipPublicKey":       "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"issuerPublicKey":          "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"sourceContractIndex":      float64(3),
+			"destinationContractIndex": float64(4),
+			"numberOfShares":           float64(750),
+			"assetName":                "CFB",
 		},
 		kafkaChecks: map[string]any{
-			"hex": "ffeeddccbbaa",
+			"possessor":                "POSSESAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"owner":                    "OWNERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"assetIssuer":              "ISSUERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"sourceContractIndex":      uint32(3),
+			"destinationContractIndex": uint32(4),
+			"numberOfShares":           int64(750),
+			"assetName":                "CFB",
 		},
 	})
 }

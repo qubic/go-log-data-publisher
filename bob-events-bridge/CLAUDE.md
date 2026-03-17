@@ -222,11 +222,63 @@ Events with `"ok": false` are skipped by the processor.
 }
 ```
 
-**Types 9-12 — hex-encoded events (dust_burning, spectrum_stats, asset_ownership/possession_managing_contract_change)**
+**Types 9-10 — hex-encoded events (dust_burning, spectrum_stats)**
 **bob format & kafka format** (no field renames, bob sends these as hex dumps)
 ```json
 {
   "hex": "<hex_string>"
+}
+```
+
+**Type 11 — asset_ownership_managing_contract_change**
+**bob format**
+```json
+{
+  "ownershipPublicKey": "<qubic_address>",
+  "issuerPublicKey": "<qubic_address>",
+  "sourceContractIndex": <uint32>,
+  "destinationContractIndex": <uint32>,
+  "numberOfShares": <int64>,
+  "assetName": "<string>"
+}
+```
+
+**kafka format - from bob format <bob_{field}>**
+```json
+{
+  "owner": "<bob_ownershipPublicKey>",
+  "assetIssuer": "<bob_issuerPublicKey>",
+  "sourceContractIndex": <uint32>,
+  "destinationContractIndex": <uint32>,
+  "numberOfShares": <int64>,
+  "assetName": "<string>"
+}
+```
+
+**Type 12 — asset_possession_managing_contract_change**
+**bob format**
+```json
+{
+  "possessionPublicKey": "<qubic_address>",
+  "ownershipPublicKey": "<qubic_address>",
+  "issuerPublicKey": "<qubic_address>",
+  "sourceContractIndex": <uint32>,
+  "destinationContractIndex": <uint32>,
+  "numberOfShares": <int64>,
+  "assetName": "<string>"
+}
+```
+
+**kafka format - from bob format <bob_{field}>**
+```json
+{
+  "possessor": "<bob_possessionPublicKey>",
+  "owner": "<bob_ownershipPublicKey>",
+  "assetIssuer": "<bob_issuerPublicKey>",
+  "sourceContractIndex": <uint32>,
+  "destinationContractIndex": <uint32>,
+  "numberOfShares": <int64>,
+  "assetName": "<string>"
 }
 ```
 
