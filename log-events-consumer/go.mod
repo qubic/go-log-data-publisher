@@ -3,6 +3,8 @@ module github.com/qubic/log-events-consumer
 go 1.25
 
 require (
+	github.com/Bose/minisentinel v0.0.0-20200130220412-917c5a9223bb
+	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/ardanlabs/conf/v3 v3.10.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.3
 	github.com/prometheus/client_golang v1.23.2
@@ -14,6 +16,7 @@ require (
 )
 
 require (
+	github.com/FZambia/sentinel v1.1.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -24,6 +27,8 @@ require (
 	github.com/elastic/elastic-transport-go/v8 v8.8.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/gomodule/redigo v1.9.3 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/linckode/circl v1.3.71 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -35,6 +40,7 @@ require (
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/qubic/go-schnorrq v1.0.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.40.0 // indirect
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect

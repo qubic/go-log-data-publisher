@@ -11,6 +11,7 @@ import (
 	"github.com/qubic/log-events-consumer/domain"
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
+	"github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -24,19 +25,30 @@ type ElasticClient interface {
 	BulkIndex(ctx context.Context, data []*elastic.EsDocument) error
 }
 
+type RedisClient interface {
+	Pipeline() redis.Pipeliner
+	HGetUint64(ctx context.Context, key, field string) (uint64, error)
+	HSet(ctx context.Context, key string, values ...interface{}) (int64, error)
+	ZRange(ctx context.Context, z redis.ZRangeArgs) ([]string, error)
+}
+
 type Consumer struct {
 	kafkaClient       KafkaClient
 	elasticClient     ElasticClient
+	redisClient       RedisClient
+	accumulator       *Accumulator
 	consumeMetrics    *metrics.Metrics
 	supportedLogTypes map[uint64][]int16
-	currentTick       uint32
+	highestTick       uint32
 	currentEpoch      uint32
 }
 
-func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
+func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, redisClient RedisClient, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
 	return &Consumer{
 		kafkaClient:       kafkaClient,
 		elasticClient:     elasticClient,
+		redisClient:       redisClient,
+		accumulator:       NewAccumulator(),
 		consumeMetrics:    metrics,
 		supportedLogTypes: supportedEventLogTypes,
 	}
@@ -57,7 +69,7 @@ func (c *Consumer) Consume(ctx context.Context) error {
 				return fmt.Errorf("consuming batch: %w", err)
 			}
 			if count > 0 {
-				log.Printf("Processed [%d] records. Tick: [%d]", count, c.currentTick)
+				log.Printf("Ingested [%d] records. Highest tick: [%d]", count, c.highestTick)
 			}
 
 		}
@@ -66,6 +78,7 @@ func (c *Consumer) Consume(ctx context.Context) error {
 }
 
 func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
+	var err error
 	defer c.kafkaClient.AllowRebalance()
 	fetches := c.kafkaClient.PollRecords(ctx, 1000)
 	if errors := fetches.Errors(); len(errors) > 0 {
@@ -94,6 +107,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		// basic filters before elastic conversion
 		if !logEvent.IsSupported(c.supportedLogTypes) {
+			c.accumulator.AddSkipped(logEvent)
 			continue
 		}
 
@@ -104,6 +118,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		// filter event logs that need conversion
 		if !logEventElastic.IsSupported() {
+			c.accumulator.AddSkipped(logEvent)
 			continue
 		}
 
@@ -119,25 +134,151 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 		})
 
 		// we know that tick number cannot exceed uint32 according to current core code
-		if uint32(logEvent.TickNumber) > c.currentTick {
-			c.currentTick = uint32(logEvent.TickNumber)
+		if uint32(logEvent.TickNumber) > c.highestTick {
+			c.highestTick = uint32(logEvent.TickNumber)
 			c.currentEpoch = logEvent.Epoch
 		}
 		c.consumeMetrics.IncProcessedMessages()
+		c.accumulator.AddProcessed(logEvent)
 	}
 
-	err := c.elasticClient.BulkIndex(ctx, documents)
-	if err != nil {
-		return -1, fmt.Errorf("bulk indexing [%d] documents: %w", len(documents), err)
+	if len(documents) > 0 { // only try to index if there are documents to index
+		err = c.elasticClient.BulkIndex(ctx, documents)
+		if err != nil {
+			return -1, fmt.Errorf("bulk indexing [%d] documents: %w", len(documents), err)
+		}
 	}
-	c.consumeMetrics.SetProcessedTick(c.currentEpoch, c.currentTick)
+	c.consumeMetrics.SetProcessedTick(c.currentEpoch, c.highestTick)
 
 	err = c.kafkaClient.CommitUncommittedOffsets(ctx)
 	if err != nil {
 		return -1, fmt.Errorf("committing offsets: %w", err)
 	}
 
+	err = c.updateRedisProcessingStatus(ctx)
+	if err != nil {
+		// maybe we want only log here
+		return -1, fmt.Errorf("updating redis processing status: %w", err)
+	}
 	return len(documents), nil
+}
+
+const KeyHighestTick = "tick:highest"
+const KeyTicksProcessed = "ticks:processed"
+const KeyTickWithNumber = "tick:%d"
+
+// TODO move code into redis store
+func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
+
+	// get highest processed tick
+	redisHighestTick, err := c.redisClient.HGetUint64(ctx, KeyHighestTick, "tickNumber")
+	if err != nil {
+		return fmt.Errorf("fetching highest tick number: %w", err)
+	}
+
+	// update in redis
+	pipe := c.redisClient.Pipeline()
+	batch := c.accumulator.Drain()
+	for tickNumber, status := range batch {
+		if tickNumber > redisHighestTick {
+			// add to ticks so that we can find it again later
+			pipe.ZAdd(ctx, KeyTicksProcessed, redis.Z{Score: float64(tickNumber), Member: tickNumber})
+			// update tick status
+			key := tickKey(tickNumber)
+			pipe.HIncrBy(ctx, key, "processed", status.Processed)
+			pipe.HIncrBy(ctx, key, "skipped", status.Processed)
+			if status.Total > 0 {
+				pipe.HSet(ctx, key, "total", status.Total)
+			}
+			log.Printf("[DEBUG] tick %d: processed %d, skipped %d, total %d", tickNumber, status.Processed, status.Skipped, status.Total)
+		}
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("flushing update pipeline: %w", err)
+	}
+
+	// read from redis to calculate newest highest tick
+	pipe = c.redisClient.Pipeline()
+	tickNumbers := make([]uint64, 0, len(batch))
+	for tickNumber := range batch {
+		if tickNumber > redisHighestTick {
+			tickNumbers = append(tickNumbers, tickNumber)
+			pipe.HMGet(ctx, tickKey(tickNumber), "total", "processed", "skipped")
+		}
+	}
+	commands, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("flushing readback pipeline: %w", err)
+	}
+
+	var newHighestTickNumber uint64
+	var newHighestCount int64
+
+	for i, tickNumber := range tickNumbers {
+		vals := commands[i].(*redis.SliceCmd).Val()
+		total, err := parseNumericField(vals[0])
+		if err != nil {
+			return fmt.Errorf("parsing total value: %w", err)
+		}
+		processed, err := parseNumericField(vals[1])
+		if err != nil {
+			return fmt.Errorf("parsing processed value: %w", err)
+		}
+		skipped, err := parseNumericField(vals[2])
+		if err != nil {
+			return fmt.Errorf("parsing skipped value: %w", err)
+		}
+		if total > 0 && (processed+skipped) >= total && tickNumber > redisHighestTick {
+			newHighestTickNumber = tickNumber
+			newHighestCount = processed
+		}
+	}
+
+	if newHighestTickNumber > redisHighestTick {
+		log.Printf("[DEBUG] highest tick [%d] with [%d] logs.", newHighestTickNumber, newHighestCount)
+		_, err = c.redisClient.HSet(ctx, "tick:highest", map[string]any{
+			"tickNumber": newHighestTickNumber,
+			"count":      newHighestCount,
+		})
+		if err != nil {
+			return fmt.Errorf("setting highest tick: %w", err)
+		}
+	}
+
+	return c.cleanUp(ctx, newHighestCount)
+
+}
+
+// TODO move code into redis store
+func (c *Consumer) cleanUp(ctx context.Context, upTo int64) error {
+	obsoleteTicks, err := c.redisClient.ZRange(ctx, redis.ZRangeArgs{
+		Key:     KeyTicksProcessed,
+		Start:   "-inf",                   // all smaller members
+		Stop:    fmt.Sprintf("(%d", upTo), // exclusive
+		ByScore: true,
+	})
+	if err != nil {
+		return fmt.Errorf("fetching obsolete processed ticks: %w", err)
+	}
+	if len(obsoleteTicks) == 0 {
+		return nil
+	}
+
+	pipe := c.redisClient.Pipeline()
+	for _, obs := range obsoleteTicks {
+		tickNumber, err := strconv.ParseUint(obs, 10, 64)
+		if err != nil {
+			return fmt.Errorf("parsing tick number: %w", err)
+		}
+		pipe.Del(ctx, tickKey(tickNumber))
+	}
+	pipe.ZRemRangeByScore(ctx, KeyTicksProcessed, "-inf", fmt.Sprintf("(%d", upTo))
+
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("flushing cleanup pipeline: %w", err)
+	}
+	return nil
 }
 
 func unmarshallLogEvent(record *kgo.Record, target any) error {
@@ -146,4 +287,15 @@ func unmarshallLogEvent(record *kgo.Record, target any) error {
 		return fmt.Errorf("unmarshalling kafka record: %w", err)
 	}
 	return nil
+}
+
+func tickKey(number uint64) string {
+	return fmt.Sprintf(KeyTickWithNumber, number)
+}
+
+func parseNumericField(val any) (int64, error) {
+	if val == nil {
+		return 0, nil
+	}
+	return strconv.ParseInt(val.(string), 10, 64)
 }

@@ -4,12 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"math/rand/v2"
 	"path/filepath"
 	"testing"
 
+	"github.com/Bose/minisentinel"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
+	"github.com/qubic/log-events-consumer/redis"
 	"github.com/qubic/log-events-consumer/testutils"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -20,6 +26,17 @@ func TestConsumeBatch_Integration(t *testing.T) {
 
 	files, err := testutils.ReadDir(kafkaDir)
 	require.NoError(t, err)
+
+	port := rand.Uint32()%60000 + 5000
+	// setup embedded redis and sentinel
+	mr := setupRedis(int(port))
+	defer mr.Close()
+
+	ms := setupSentinel(mr, int(port+1))
+	defer ms.Close()
+
+	redisClient := setupRedisClient(ms)
+	defer redisClient.Close()
 
 	for i, file := range files {
 		if file.IsDir() || filepath.Ext(file.Name()) != ".json" {
@@ -63,7 +80,7 @@ func TestConsumeBatch_Integration(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics(fmt.Sprintf("test_integration_%d", i))
-			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 255}})
+			consumer := NewConsumer(mockKafka, mockElastic, redisClient, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 255}})
 
 			count, err := consumer.consumeBatch(context.Background())
 			require.NoError(t, err)
@@ -96,6 +113,17 @@ func TestConsumeBatch_Filtered_Integration(t *testing.T) {
 
 	files, err := testutils.ReadDir(filteredDir)
 	require.NoError(t, err)
+
+	port := rand.Uint32()%60000 + 5000
+	// setup embedded redis and sentinel
+	mr := setupRedis(int(port))
+	defer mr.Close()
+
+	ms := setupSentinel(mr, int(port+1))
+	defer ms.Close()
+
+	redisClient := setupRedisClient(ms)
+	defer redisClient.Close()
 
 	for i, file := range files {
 		if file.IsDir() || filepath.Ext(file.Name()) != ".json" {
@@ -135,7 +163,7 @@ func TestConsumeBatch_Filtered_Integration(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics(fmt.Sprintf("test_filtered_integration_%d", i))
-			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+			consumer := NewConsumer(mockKafka, mockElastic, redisClient, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 			count, err := consumer.consumeBatch(context.Background())
 			require.NoError(t, err)
@@ -144,4 +172,33 @@ func TestConsumeBatch_Filtered_Integration(t *testing.T) {
 			require.Empty(t, capturedDocs, "Expected no documents to be indexed for %s", file.Name())
 		})
 	}
+}
+
+func setupRedis(port int) *miniredis.Miniredis {
+	mr := miniredis.NewMiniRedis()
+	err := mr.StartAddr(fmt.Sprintf(":%d", port))
+	if err != nil {
+		log.Fatalf("Setup redis: %v", err)
+	}
+	return mr
+}
+
+func setupSentinel(m *miniredis.Miniredis, port int) *minisentinel.Sentinel {
+	ms := minisentinel.NewSentinel(m, minisentinel.WithReplica(m))
+	err := ms.StartAddr(fmt.Sprintf(":%d", port))
+	if err != nil {
+		log.Fatalf("Setup sentinel: %v", err)
+	}
+	return ms
+}
+
+func setupRedisClient(ms *minisentinel.Sentinel) *redis.Client {
+	// Setup: Create a Redis client with failover configuration
+	// Adjust these settings to match your Redis setup
+	failoverOpt := &goredis.FailoverOptions{
+		MasterName:    ms.MasterInfo().Name,
+		SentinelAddrs: []string{ms.Addr()},
+		DB:            0,
+	}
+	return redis.CreateClient(failoverOpt)
 }

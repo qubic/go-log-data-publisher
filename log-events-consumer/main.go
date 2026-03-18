@@ -20,8 +20,9 @@ import (
 	"github.com/qubic/log-events-consumer/consume"
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
+	"github.com/qubic/log-events-consumer/redis"
 	"github.com/qubic/log-events-consumer/status"
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/plugin/kprom"
 )
@@ -53,7 +54,7 @@ func run() error {
 			ConsumerGroup    string   `conf:"default:qubic-elastic"`
 		}
 		Redis struct {
-			SentinelAddrs    []string      `conf:"default:localhost:26379"` // format: "host:port"
+			SentinelHosts    []string      `conf:"default:localhost:26379"` // format: "host:port"
 			MasterName       string        `conf:"default:qubic-master"`
 			Password         string        `conf:"optional,mask"`
 			SentinelPassword string        `conf:"optional,mask"`
@@ -74,10 +75,9 @@ func run() error {
 		}
 	}
 
-	// this client sends read requests to slave nodes
-	_ = redis.NewFailoverClusterClient(&redis.FailoverOptions{
+	redisCl := redis.CreateClient(&goredis.FailoverOptions{
 		MasterName:       cfg.Redis.MasterName,
-		SentinelAddrs:    cfg.Redis.SentinelAddrs,
+		SentinelAddrs:    cfg.Redis.SentinelHosts,
 		SentinelPassword: cfg.Redis.SentinelPassword,
 		Password:         cfg.Redis.Password,
 		DB:               cfg.Redis.DB,
@@ -85,9 +85,14 @@ func run() error {
 		ReadTimeout:      cfg.Redis.ReadTimeout,
 		WriteTimeout:     cfg.Redis.WriteTimeout,
 		PoolSize:         cfg.Redis.PoolSize,
-		// To route commands by latency or randomly, enable one of the following.
-		RouteByLatency: true,
+		RouteByLatency:   true, // route commands by latency (vs randomly)
 	})
+	defer redisCl.Close()
+	pong, err := redisCl.Ping(context.Background())
+	if err != nil {
+		return fmt.Errorf("connecting to redis: %w", err)
+	}
+	log.Printf("Connected to redis: %s", pong)
 
 	// Parsing of the default value didn't work properly. We manually set the default.
 	if cfg.Base.SupportedLogTypes == "" {
@@ -115,7 +120,7 @@ func run() error {
 		kprom.Registerer(prometheus.DefaultRegisterer),
 		kprom.Gatherer(prometheus.DefaultGatherer))
 
-	kcl, err := kgo.NewClient(
+	kafkaCl, err := kgo.NewClient(
 		kgo.WithHooks(m),
 		kgo.SeedBrokers(cfg.Broker.BootstrapServers...),
 		kgo.ConsumeTopics(cfg.Broker.ConsumeTopic),
@@ -127,7 +132,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("creating kgo client: %w", err)
 	}
-	defer kcl.Close()
+	defer kafkaCl.Close()
 
 	cert, err := os.ReadFile(cfg.Elastic.Certificate)
 	if err != nil {
@@ -146,11 +151,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("creating elasticsearch client: %w", err)
 	}
-	elasticClient := elastic.NewClient(esClient, cfg.Elastic.IndexName)
+	elasticCl := elastic.NewClient(esClient, cfg.Elastic.IndexName)
 
 	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
 
-	consumer := consume.NewConsumer(kcl, elasticClient, consumeMetrics, supportedTypes)
+	consumer := consume.NewConsumer(kafkaCl, elasticCl, redisCl, consumeMetrics, supportedTypes)
 	procError := make(chan error, 1)
 
 	consumerCtx, consumerCtxCancel := context.WithCancel(context.Background())
