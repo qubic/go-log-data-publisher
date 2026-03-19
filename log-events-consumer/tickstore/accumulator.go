@@ -5,9 +5,9 @@ import (
 )
 
 type TickStatus struct {
-	Processed int64
-	Skipped   int64
-	Total     int64
+	Processed uint64
+	Skipped   uint64
+	Total     uint64
 }
 
 type Accumulator struct {
@@ -27,7 +27,7 @@ func (a *Accumulator) AddProcessed(tickNumber, index uint64, isLastLog bool) {
 	tickStatus.Processed++
 
 	if isLastLog {
-		tickStatus.Total = int64(index)
+		tickStatus.Total = index
 	}
 }
 
@@ -39,7 +39,7 @@ func (a *Accumulator) AddSkipped(tickNumber, index uint64, isLastLog bool) {
 	tickStatus.Skipped++
 
 	if isLastLog {
-		tickStatus.Total = int64(index)
+		tickStatus.Total = index
 	}
 }
 
