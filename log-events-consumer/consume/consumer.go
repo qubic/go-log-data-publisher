@@ -32,23 +32,27 @@ type RedisClient interface {
 	ZRange(ctx context.Context, z redis.ZRangeArgs) ([]string, error)
 }
 
+type TickStore interface {
+	AddProcessed(log domain.LogEvent)
+	AddSkipped(log domain.LogEvent)
+	UpdateTickHeight(ctx context.Context) error
+}
+
 type Consumer struct {
 	kafkaClient       KafkaClient
 	elasticClient     ElasticClient
-	redisClient       RedisClient
-	accumulator       *Accumulator
+	tickStore         TickStore
 	consumeMetrics    *metrics.Metrics
 	supportedLogTypes map[uint64][]int16
 	highestTick       uint32
 	currentEpoch      uint32
 }
 
-func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, redisClient RedisClient, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
+func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, tickStore TickStore, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
 	return &Consumer{
 		kafkaClient:       kafkaClient,
 		elasticClient:     elasticClient,
-		redisClient:       redisClient,
-		accumulator:       NewAccumulator(),
+		tickStore:         tickStore,
 		consumeMetrics:    metrics,
 		supportedLogTypes: supportedEventLogTypes,
 	}
@@ -107,7 +111,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		// basic filters before elastic conversion
 		if !logEvent.IsSupported(c.supportedLogTypes) {
-			c.accumulator.AddSkipped(logEvent)
+			c.tickStore.AddSkipped(logEvent)
 			continue
 		}
 
@@ -118,7 +122,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		// filter event logs that need conversion
 		if !logEventElastic.IsSupported() {
-			c.accumulator.AddSkipped(logEvent)
+			c.tickStore.AddSkipped(logEvent)
 			continue
 		}
 
@@ -139,7 +143,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 			c.currentEpoch = logEvent.Epoch
 		}
 		c.consumeMetrics.IncProcessedMessages()
-		c.accumulator.AddProcessed(logEvent)
+		c.tickStore.AddProcessed(logEvent)
 	}
 
 	if len(documents) > 0 { // only try to index if there are documents to index
@@ -155,7 +159,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 		return -1, fmt.Errorf("committing offsets: %w", err)
 	}
 
-	err = c.updateRedisProcessingStatus(ctx)
+	err = c.tickStore.UpdateTickHeight(ctx)
 	if err != nil {
 		// maybe we want only log here
 		return -1, fmt.Errorf("updating redis processing status: %w", err)
@@ -163,133 +167,144 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 	return len(documents), nil
 }
 
-const KeyHighestTick = "tick:highest"
-const KeyTicksProcessed = "ticks:processed"
-const KeyTickWithNumber = "tick:%d"
-
-// TODO move code into redis store
-func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
-
-	// get highest processed tick
-	storedCompletedTickNumber, err := c.redisClient.HGetUint64(ctx, KeyHighestTick, "tickNumber")
-	if err != nil {
-		return fmt.Errorf("fetching highest tick number: %w", err)
-	}
-
-	// update in redis
-	pipe := c.redisClient.Pipeline()
-	batch := c.accumulator.Drain()
-	for tickNumber, status := range batch {
-		if tickNumber > storedCompletedTickNumber { // otherwise irrelevant
-			// add to ticks so that we can find it again later
-			pipe.ZAdd(ctx, KeyTicksProcessed, redis.Z{Score: float64(tickNumber), Member: tickNumber})
-			// update tick status
-			key := tickKey(tickNumber)
-			pipe.HIncrBy(ctx, key, "processed", status.Processed)
-			pipe.HIncrBy(ctx, key, "skipped", status.Processed)
-			if status.Total > 0 {
-				pipe.HSet(ctx, key, "total", status.Total)
-			}
-			log.Printf("[DEBUG] tick %d: processed %d, skipped %d, total %d", tickNumber, status.Processed, status.Skipped, status.Total)
-		}
-	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("flushing update pipeline: %w", err)
-	}
-
-	// read from redis to calculate newest highest tick
-	pipe = c.redisClient.Pipeline()
-	tickNumbers := make([]uint64, 0, len(batch))
-	for tickNumber := range batch {
-		if tickNumber > storedCompletedTickNumber {
-			tickNumbers = append(tickNumbers, tickNumber)
-			pipe.HMGet(ctx, tickKey(tickNumber), "total", "processed", "skipped")
-		}
-	}
-	commands, err := pipe.Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("flushing readback pipeline: %w", err)
-	}
-
-	var newHighestTickNumber uint64
-	var newHighestCount int64
-
-	for i, tickNumber := range tickNumbers {
-		vals := commands[i].(*redis.SliceCmd).Val()
-		total, err := parseNumericField(vals[0])
-		if err != nil {
-			return fmt.Errorf("parsing total value: %w", err)
-		}
-		processed, err := parseNumericField(vals[1])
-		if err != nil {
-			return fmt.Errorf("parsing processed value: %w", err)
-		}
-		skipped, err := parseNumericField(vals[2])
-		if err != nil {
-			return fmt.Errorf("parsing skipped value: %w", err)
-		}
-		if isCompletedTick(total, processed, skipped) && isNewHighestTick(tickNumber, newHighestTickNumber, storedCompletedTickNumber) {
-			newHighestTickNumber = tickNumber
-			newHighestCount = processed
-		}
-	}
-
-	// update highest tick
-	if newHighestTickNumber > storedCompletedTickNumber {
-		log.Printf("[DEBUG] highest tick [%d] with [%d] logs.", newHighestTickNumber, newHighestCount)
-		_, err = c.redisClient.HSet(ctx, "tick:highest", map[string]any{
-			"tickNumber": newHighestTickNumber,
-			"count":      newHighestCount,
-		})
-		if err != nil {
-			return fmt.Errorf("setting highest tick: %w", err)
-		}
-	}
-
-	// clean obsolete ticks
-	return c.cleanUp(ctx, newHighestCount)
-
-}
-
-func isCompletedTick(total int64, processed int64, skipped int64) bool {
-	return total > 0 && (processed+skipped) >= total
-}
-
-func isNewHighestTick(tickNumber, newHighestTickNumber, storedTickNumber uint64) bool {
-	return tickNumber > newHighestTickNumber && tickNumber > storedTickNumber
-}
-
-// TODO move code into redis store
-func (c *Consumer) cleanUp(ctx context.Context, upTo int64) error {
-	obsoleteTicks, err := c.redisClient.ZRange(ctx, redis.ZRangeArgs{
-		Key:     KeyTicksProcessed,
-		Start:   "-inf",                   // all smaller members
-		Stop:    fmt.Sprintf("(%d", upTo), // exclusive
-		ByScore: true,
-	})
-	if err != nil {
-		return fmt.Errorf("fetching obsolete processed ticks: %w", err)
-	}
-	if len(obsoleteTicks) == 0 {
-		return nil
-	}
-
-	pipe := c.redisClient.Pipeline()
-	for _, obs := range obsoleteTicks {
-		tickNumber, err := strconv.ParseUint(obs, 10, 64)
-		if err != nil {
-			return fmt.Errorf("parsing tick number: %w", err)
-		}
-		pipe.Del(ctx, tickKey(tickNumber))
-	}
-	pipe.ZRemRangeByScore(ctx, KeyTicksProcessed, "-inf", fmt.Sprintf("(%d", upTo))
-
-	_, err = pipe.Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("flushing cleanup pipeline: %w", err)
-	}
-	return nil
-}
+//const KeyHighestTick = "tick:highest"
+//const KeyTicksProcessed = "ticks:processed"
+//const KeyTickWithNumber = "tick:%d"
+//
+//// TODO move code into redis store
+//func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
+//
+//	// get highest processed tick
+//	storedCompletedTickNumber, err := c.redisClient.HGetUint64(ctx, KeyHighestTick, "tickNumber")
+//	if err != nil {
+//		return fmt.Errorf("fetching highest tick number: %w", err)
+//	}
+//
+//	// update in redis
+//	pipe := c.redisClient.Pipeline()
+//	batch := c.accumulator.Drain()
+//	for tickNumber, status := range batch {
+//		if tickNumber > storedCompletedTickNumber { // otherwise irrelevant
+//			// add to ticks so that we can find it again later
+//			pipe.ZAdd(ctx, KeyTicksProcessed, redis.Z{Score: float64(tickNumber), Member: tickNumber})
+//			// update tick status
+//			key := tickKey(tickNumber)
+//			pipe.HIncrBy(ctx, key, "processed", status.Processed)
+//			pipe.HIncrBy(ctx, key, "skipped", status.Processed)
+//			if status.Total > 0 {
+//				pipe.HSet(ctx, key, "total", status.Total)
+//			}
+//			log.Printf("[DEBUG] tick %d: processed %d, skipped %d, total %d", tickNumber, status.Processed, status.Skipped, status.Total)
+//		}
+//	}
+//	if _, err := pipe.Exec(ctx); err != nil {
+//		return fmt.Errorf("flushing update pipeline: %w", err)
+//	}
+//
+//	// read from redis to calculate newest highest tick
+//	pipe = c.redisClient.Pipeline()
+//	tickNumbers := make([]uint64, 0, len(batch))
+//	for tickNumber := range batch {
+//		if tickNumber > storedCompletedTickNumber {
+//			tickNumbers = append(tickNumbers, tickNumber)
+//			pipe.HMGet(ctx, tickKey(tickNumber), "total", "processed", "skipped")
+//		}
+//	}
+//	commands, err := pipe.Exec(ctx)
+//	if err != nil {
+//		return fmt.Errorf("flushing readback pipeline: %w", err)
+//	}
+//
+//	var newHighestTickNumber uint64
+//	var newHighestCount int64
+//
+//	for i, tickNumber := range tickNumbers {
+//		vals := commands[i].(*redis.SliceCmd).Val()
+//		total, err := parseNumericField(vals[0])
+//		if err != nil {
+//			return fmt.Errorf("parsing total value: %w", err)
+//		}
+//		processed, err := parseNumericField(vals[1])
+//		if err != nil {
+//			return fmt.Errorf("parsing processed value: %w", err)
+//		}
+//		skipped, err := parseNumericField(vals[2])
+//		if err != nil {
+//			return fmt.Errorf("parsing skipped value: %w", err)
+//		}
+//		if isCompletedTick(total, processed, skipped) && isNewHighestTick(tickNumber, newHighestTickNumber, storedCompletedTickNumber) {
+//			newHighestTickNumber = tickNumber
+//			newHighestCount = processed
+//		}
+//	}
+//
+//	// update highest tick
+//	if newHighestTickNumber > storedCompletedTickNumber {
+//		log.Printf("[DEBUG] highest tick [%d] with [%d] logs.", newHighestTickNumber, newHighestCount)
+//		_, err = c.redisClient.HSet(ctx, "tick:highest", map[string]any{
+//			"tickNumber": newHighestTickNumber,
+//			"count":      newHighestCount,
+//		})
+//		if err != nil {
+//			return fmt.Errorf("setting highest tick: %w", err)
+//		}
+//	}
+//
+//	// clean obsolete ticks
+//	return c.cleanUp(ctx, newHighestCount)
+//
+//}
+//
+//func isCompletedTick(total int64, processed int64, skipped int64) bool {
+//	return total > 0 && (processed+skipped) >= total
+//}
+//
+//func isNewHighestTick(tickNumber, newHighestTickNumber, storedTickNumber uint64) bool {
+//	return tickNumber > newHighestTickNumber && tickNumber > storedTickNumber
+//}
+//
+//// TODO move code into redis store
+//func (c *Consumer) cleanUp(ctx context.Context, upTo int64) error {
+//	obsoleteTicks, err := c.redisClient.ZRange(ctx, redis.ZRangeArgs{
+//		Key:     KeyTicksProcessed,
+//		Start:   "-inf",                   // all smaller members
+//		Stop:    fmt.Sprintf("(%d", upTo), // exclusive
+//		ByScore: true,
+//	})
+//	if err != nil {
+//		return fmt.Errorf("fetching obsolete processed ticks: %w", err)
+//	}
+//	if len(obsoleteTicks) == 0 {
+//		return nil
+//	}
+//
+//	pipe := c.redisClient.Pipeline()
+//	for _, obs := range obsoleteTicks {
+//		tickNumber, err := strconv.ParseUint(obs, 10, 64)
+//		if err != nil {
+//			return fmt.Errorf("parsing tick number: %w", err)
+//		}
+//		pipe.Del(ctx, tickKey(tickNumber))
+//	}
+//	pipe.ZRemRangeByScore(ctx, KeyTicksProcessed, "-inf", fmt.Sprintf("(%d", upTo))
+//
+//	_, err = pipe.Exec(ctx)
+//	if err != nil {
+//		return fmt.Errorf("flushing cleanup pipeline: %w", err)
+//	}
+//	return nil
+//}
+//
+//func tickKey(number uint64) string {
+//	return fmt.Sprintf(KeyTickWithNumber, number)
+//}
+//
+//func parseNumericField(val any) (int64, error) {
+//	if val == nil {
+//		return 0, nil
+//	}
+//	return strconv.ParseInt(val.(string), 10, 64)
+//}
 
 func unmarshallLogEvent(record *kgo.Record, target any) error {
 	err := json.Unmarshal(record.Value, target)
@@ -297,15 +312,4 @@ func unmarshallLogEvent(record *kgo.Record, target any) error {
 		return fmt.Errorf("unmarshalling kafka record: %w", err)
 	}
 	return nil
-}
-
-func tickKey(number uint64) string {
-	return fmt.Sprintf(KeyTickWithNumber, number)
-}
-
-func parseNumericField(val any) (int64, error) {
-	if val == nil {
-		return 0, nil
-	}
-	return strconv.ParseInt(val.(string), 10, 64)
 }

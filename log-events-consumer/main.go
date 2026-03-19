@@ -17,11 +17,12 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/qubic/log-events-consumer/api"
 	"github.com/qubic/log-events-consumer/consume"
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
 	"github.com/qubic/log-events-consumer/redis"
-	"github.com/qubic/log-events-consumer/status"
+	"github.com/qubic/log-events-consumer/tickstore"
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/plugin/kprom"
@@ -74,25 +75,6 @@ func run() error {
 			SupportedLogTypes string
 		}
 	}
-
-	redisCl := redis.CreateClient(&goredis.FailoverOptions{
-		MasterName:       cfg.Redis.MasterName,
-		SentinelAddrs:    cfg.Redis.SentinelHosts,
-		SentinelPassword: cfg.Redis.SentinelPassword,
-		Password:         cfg.Redis.Password,
-		DB:               cfg.Redis.DB,
-		DialTimeout:      cfg.Redis.DialTimeout,
-		ReadTimeout:      cfg.Redis.ReadTimeout,
-		WriteTimeout:     cfg.Redis.WriteTimeout,
-		PoolSize:         cfg.Redis.PoolSize,
-		RouteByLatency:   true, // route commands by latency (vs randomly)
-	})
-	defer redisCl.Close()
-	pong, err := redisCl.Ping(context.Background())
-	if err != nil {
-		return fmt.Errorf("connecting to redis: %w", err)
-	}
-	log.Printf("Connected to redis: %s", pong)
 
 	// Parsing of the default value didn't work properly. We manually set the default.
 	if cfg.Base.SupportedLogTypes == "" {
@@ -153,9 +135,29 @@ func run() error {
 	}
 	elasticCl := elastic.NewClient(esClient, cfg.Elastic.IndexName)
 
-	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
+	redisCl := redis.CreateClient(&goredis.FailoverOptions{
+		MasterName:       cfg.Redis.MasterName,
+		SentinelAddrs:    cfg.Redis.SentinelHosts,
+		SentinelPassword: cfg.Redis.SentinelPassword,
+		Password:         cfg.Redis.Password,
+		DB:               cfg.Redis.DB,
+		DialTimeout:      cfg.Redis.DialTimeout,
+		ReadTimeout:      cfg.Redis.ReadTimeout,
+		WriteTimeout:     cfg.Redis.WriteTimeout,
+		PoolSize:         cfg.Redis.PoolSize,
+		RouteByLatency:   true, // route commands by latency (vs randomly)
+	})
+	defer redisCl.Close()
+	pong, err := redisCl.Ping(context.Background())
+	if err != nil {
+		return fmt.Errorf("connecting to redis: %w", err)
+	}
+	log.Printf("Connected to redis: %s", pong)
 
-	consumer := consume.NewConsumer(kafkaCl, elasticCl, redisCl, consumeMetrics, supportedTypes)
+	tickStore := tickstore.New(redisCl)
+
+	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
+	consumer := consume.NewConsumer(kafkaCl, elasticCl, tickStore, consumeMetrics, supportedTypes)
 	procError := make(chan error, 1)
 
 	consumerCtx, consumerCtxCancel := context.WithCancel(context.Background())
@@ -168,7 +170,7 @@ func run() error {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 
-	http.HandleFunc("/health", status.Health)
+	http.HandleFunc("/health", api.Health)
 	http.Handle("/metrics", promhttp.Handler())
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Metrics.Port),
