@@ -154,7 +154,7 @@ func run() error {
 	}
 	log.Printf("Connected to redis: %s", pong)
 
-	tickStore := tickstore.New(redisCl)
+	tickStore := tickstore.NewStore(redisCl)
 
 	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
 	consumer := consume.NewConsumer(kafkaCl, elasticCl, tickStore, consumeMetrics, supportedTypes)

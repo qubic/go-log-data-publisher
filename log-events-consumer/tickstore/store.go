@@ -26,7 +26,7 @@ type Store struct {
 	accumulator *Accumulator
 }
 
-func New(redisClient RedisClient) *Store {
+func NewStore(redisClient RedisClient) *Store {
 	return &Store{
 		redisClient: redisClient,
 		accumulator: NewAccumulator(),
@@ -87,7 +87,7 @@ func (s *Store) updateStatusInRedis(ctx context.Context, highestTickNumber uint6
 			// update tick status
 			key := tickKey(tickNumber)
 			pipe.HIncrBy(ctx, key, "processed", int64(status.Processed))
-			pipe.HIncrBy(ctx, key, "skipped", int64(status.Processed))
+			pipe.HIncrBy(ctx, key, "skipped", int64(status.Skipped))
 			if status.Total > 0 {
 				pipe.HSet(ctx, key, "total", status.Total)
 			}
