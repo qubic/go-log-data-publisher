@@ -171,7 +171,7 @@ const KeyTickWithNumber = "tick:%d"
 func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
 
 	// get highest processed tick
-	redisHighestTick, err := c.redisClient.HGetUint64(ctx, KeyHighestTick, "tickNumber")
+	storedCompletedTickNumber, err := c.redisClient.HGetUint64(ctx, KeyHighestTick, "tickNumber")
 	if err != nil {
 		return fmt.Errorf("fetching highest tick number: %w", err)
 	}
@@ -180,7 +180,7 @@ func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
 	pipe := c.redisClient.Pipeline()
 	batch := c.accumulator.Drain()
 	for tickNumber, status := range batch {
-		if tickNumber > redisHighestTick {
+		if tickNumber > storedCompletedTickNumber { // otherwise irrelevant
 			// add to ticks so that we can find it again later
 			pipe.ZAdd(ctx, KeyTicksProcessed, redis.Z{Score: float64(tickNumber), Member: tickNumber})
 			// update tick status
@@ -201,7 +201,7 @@ func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
 	pipe = c.redisClient.Pipeline()
 	tickNumbers := make([]uint64, 0, len(batch))
 	for tickNumber := range batch {
-		if tickNumber > redisHighestTick {
+		if tickNumber > storedCompletedTickNumber {
 			tickNumbers = append(tickNumbers, tickNumber)
 			pipe.HMGet(ctx, tickKey(tickNumber), "total", "processed", "skipped")
 		}
@@ -228,13 +228,14 @@ func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("parsing skipped value: %w", err)
 		}
-		if total > 0 && (processed+skipped) >= total && tickNumber > redisHighestTick {
+		if isCompletedTick(total, processed, skipped) && isNewHighestTick(tickNumber, newHighestTickNumber, storedCompletedTickNumber) {
 			newHighestTickNumber = tickNumber
 			newHighestCount = processed
 		}
 	}
 
-	if newHighestTickNumber > redisHighestTick {
+	// update highest tick
+	if newHighestTickNumber > storedCompletedTickNumber {
 		log.Printf("[DEBUG] highest tick [%d] with [%d] logs.", newHighestTickNumber, newHighestCount)
 		_, err = c.redisClient.HSet(ctx, "tick:highest", map[string]any{
 			"tickNumber": newHighestTickNumber,
@@ -245,8 +246,17 @@ func (c *Consumer) updateRedisProcessingStatus(ctx context.Context) error {
 		}
 	}
 
+	// clean obsolete ticks
 	return c.cleanUp(ctx, newHighestCount)
 
+}
+
+func isCompletedTick(total int64, processed int64, skipped int64) bool {
+	return total > 0 && (processed+skipped) >= total
+}
+
+func isNewHighestTick(tickNumber, newHighestTickNumber, storedTickNumber uint64) bool {
+	return tickNumber > newHighestTickNumber && tickNumber > storedTickNumber
 }
 
 // TODO move code into redis store
