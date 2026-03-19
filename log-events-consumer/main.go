@@ -56,7 +56,7 @@ func run() error {
 		}
 		Redis struct {
 			SentinelHosts    []string      `conf:"default:localhost:26379"` // format: "host:port"
-			MasterName       string        `conf:"default:qubic-master"`
+			MasterName       string        `conf:"default:mymaster"`
 			Password         string        `conf:"optional,mask"`
 			SentinelPassword string        `conf:"optional,mask"`
 			DB               int           `conf:"default:0"`
