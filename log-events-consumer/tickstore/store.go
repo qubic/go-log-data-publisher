@@ -135,7 +135,7 @@ func (s *Store) setHighestTick(ctx context.Context, updatedTickNumbers []uint64,
 		if err != nil {
 			return 0, fmt.Errorf("parsing skipped value: %w", err)
 		}
-		if isCompletedTick(total, processed, skipped) && isNewHighestTick(tickNumber, newHighestTickNumber, highestTickNumber) {
+		if isCompletedTick(total, processed, skipped) && processed > 0 && isNewHighestTick(tickNumber, newHighestTickNumber, highestTickNumber) {
 			newHighestTickNumber = tickNumber
 			newHighestCount = processed
 		}

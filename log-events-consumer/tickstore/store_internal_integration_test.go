@@ -83,6 +83,30 @@ func TestIntegrationSetHighestTick(t *testing.T) {
 	require.Equal(t, tickNum, storedHighest)
 }
 
+func TestIntegrationSetHighestTick_NoProcessedLogs(t *testing.T) {
+	ctx, store, redisClient, _, cleanup := setupIntegration(t)
+	defer cleanup()
+
+	// Setup a completed tick with 0 processed logs but 10 skipped logs
+	tickNum := uint64(101)
+	cmd := goredis.NewSliceCmd(ctx)
+	cmd.SetVal([]interface{}{"10", "0", "10"}) // Completed (total 10, processed 0, skipped 10)
+
+	// Set initial highest tick to 100
+	_, err := redisClient.HSet(ctx, KeyHighestTick, "tickNumber", uint64(100), "count", uint64(5))
+	require.NoError(t, err)
+
+	newHighest, err := store.setHighestTick(ctx, []uint64{tickNum}, []goredis.Cmder{cmd}, 100)
+	require.NoError(t, err)
+	// Should return 0 as new highest because processed logs = 0
+	require.Equal(t, uint64(0), newHighest)
+
+	// Verify in redis that it's still 100
+	storedHighest, err := redisClient.HGetUint64(ctx, KeyHighestTick, "tickNumber")
+	require.NoError(t, err)
+	require.Equal(t, uint64(100), storedHighest)
+}
+
 func TestIntegrationCleanUp(t *testing.T) {
 	ctx, store, _, m, cleanup := setupIntegration(t)
 	defer cleanup()
