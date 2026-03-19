@@ -145,7 +145,6 @@ func run() error {
 		ReadTimeout:      cfg.Redis.ReadTimeout,
 		WriteTimeout:     cfg.Redis.WriteTimeout,
 		PoolSize:         cfg.Redis.PoolSize,
-		RouteByLatency:   true, // route commands by latency (vs randomly)
 	})
 	defer redisCl.Close()
 	pong, err := redisCl.Ping(context.Background())
