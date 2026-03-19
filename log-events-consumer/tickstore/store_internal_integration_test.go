@@ -3,7 +3,6 @@ package tickstore
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -116,13 +115,12 @@ func TestIntegrationCleanUp(t *testing.T) {
 func setupIntegration(t *testing.T) (context.Context, *Store, *redis.Client, *miniredis.Miniredis, func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
-	port := rand.Uint32()%60000 + 5000
 	m := miniredis.NewMiniRedis()
-	err := m.StartAddr(fmt.Sprintf(":%d", port))
+	err := m.StartAddr("127.0.0.1:0")
 	require.NoError(t, err)
 
 	s := minisentinel.NewSentinel(m, minisentinel.WithReplica(m))
-	err = s.StartAddr(fmt.Sprintf(":%d", port+1))
+	err = s.StartAddr("127.0.0.1:0")
 	require.NoError(t, err)
 
 	failoverOpt := &goredis.FailoverOptions{

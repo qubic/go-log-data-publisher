@@ -2,8 +2,6 @@ package redis
 
 import (
 	"context"
-	"fmt"
-	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -16,15 +14,13 @@ import (
 
 func TestClientPing(t *testing.T) {
 
-	port := rand.Uint32()%60000 + 5000
-
 	m := miniredis.NewMiniRedis()
-	err := m.StartAddr(fmt.Sprintf(":%d", port))
+	err := m.StartAddr("127.0.0.1:0")
 	require.NoError(t, err)
 	defer m.Close()
 
 	s := minisentinel.NewSentinel(m, minisentinel.WithReplica(m))
-	err = s.StartAddr(fmt.Sprintf(":%d", port+1))
+	err = s.StartAddr("127.0.0.1:0")
 	require.NoError(t, err)
 	defer s.Close()
 
