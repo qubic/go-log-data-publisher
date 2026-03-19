@@ -144,10 +144,7 @@ func (s *Store) setHighestTick(ctx context.Context, updatedTickNumbers []uint64,
 	// update highest tick number and count
 	if newHighestTickNumber > highestTickNumber {
 		log.Printf("[DEBUG] highest tick [%d] with [%d] logs.", newHighestTickNumber, newHighestCount)
-		_, err := s.redisClient.HSet(ctx, "tick:highest", map[string]any{
-			"tickNumber": newHighestTickNumber,
-			"count":      newHighestCount,
-		})
+		_, err := s.redisClient.HSet(ctx, "tick:highest", "tickNumber", newHighestTickNumber, "count", newHighestCount)
 		if err != nil {
 			return 0, fmt.Errorf("setting highest tick: %w", err)
 		}

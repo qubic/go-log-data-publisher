@@ -161,13 +161,7 @@ func TestSetHighestTick(t *testing.T) {
 
 	updateResults := []redis.Cmder{cmd101, cmd102}
 
-	mockRedis.On("HSet", ctx, "tick:highest", mock.MatchedBy(func(v []interface{}) bool {
-		if len(v) != 1 {
-			return false
-		}
-		m, ok := v[0].(map[string]any)
-		return ok && m["tickNumber"] == uint64(101) && m["count"] == uint64(10)
-	})).Return(1, nil)
+	mockRedis.On("HSet", ctx, "tick:highest", []interface{}{"tickNumber", uint64(101), "count", uint64(10)}).Return(1, nil)
 
 	newHighest, err := store.setHighestTick(ctx, updatedTickNumbers, updateResults, highestTick)
 
@@ -242,13 +236,7 @@ func TestUpdateTickHeight(t *testing.T) {
 	mockPipe.On("Exec", ctx).Return([]redis.Cmder{cmd101}, nil).Once() // Second Exec is for readback
 
 	// 4. setHighestTick
-	mockRedis.On("HSet", ctx, "tick:highest", mock.MatchedBy(func(v []interface{}) bool {
-		if len(v) != 1 {
-			return false
-		}
-		m, ok := v[0].(map[string]any)
-		return ok && m["tickNumber"] == uint64(101) && m["count"] == uint64(2)
-	})).Return(1, nil)
+	mockRedis.On("HSet", ctx, "tick:highest", []interface{}{"tickNumber", uint64(101), "count", uint64(2)}).Return(1, nil)
 
 	// 5. cleanUp
 	mockRedis.On("ZRange", ctx, redis.ZRangeArgs{
