@@ -23,8 +23,8 @@ func TestIntegrationUpdateStatusInRedis(t *testing.T) {
 	highestTick := uint64(100)
 	tickNum := uint64(101)
 
-	store.accumulator.AddProcessed(tickNum, 1, false)
-	store.accumulator.AddProcessed(tickNum, 2, true) // Total 2, Processed 2
+	store.accumulator.AddProcessed(tickNum, 0, false)
+	store.accumulator.AddProcessed(tickNum, 1, true) // Total 2, Processed 2
 
 	batch, err := store.updateStatusInRedis(ctx, highestTick)
 	require.NoError(t, err)

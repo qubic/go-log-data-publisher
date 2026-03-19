@@ -9,19 +9,19 @@ import (
 func TestAccumulator(t *testing.T) {
 	acc := NewAccumulator()
 	// 1. Add processed log
-	acc.AddProcessed(100, 1, false)
+	acc.AddProcessed(100, 0, false)
 	// 2. Add skipped log
-	acc.AddSkipped(100, 2, false)
+	acc.AddSkipped(100, 1, false)
 	// 3. Set total for tick 100
-	acc.AddProcessed(100, 3, true)
+	acc.AddProcessed(100, 2, true)
 	// 4. Add for another tick
-	acc.AddProcessed(101, 1, false)
+	acc.AddProcessed(101, 0, false)
 
 	snapshot := acc.Drain()
 	require.Len(t, snapshot, 2)
 
 	// 5. Ensure Drain cleared the data and doesn't influence snapshot
-	acc.AddProcessed(102, 1, false)
+	acc.AddProcessed(102, 0, false)
 	require.Len(t, acc.Drain(), 1)
 	require.Len(t, acc.Drain(), 0)
 

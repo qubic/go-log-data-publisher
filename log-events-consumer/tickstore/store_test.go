@@ -92,7 +92,7 @@ func TestUpdateStatusInRedis(t *testing.T) {
 
 	// Add some data to accumulator
 	store.accumulator.AddProcessed(101, 10, false)
-	store.accumulator.AddSkipped(101, 12, true) // Skipped 1, Total 11
+	store.accumulator.AddSkipped(101, 12, true) // Skipped 1, Total 13
 	store.accumulator.AddProcessed(101, 11, false)
 	store.accumulator.AddProcessed(99, 1, true) // Should be ignored
 
@@ -100,7 +100,7 @@ func TestUpdateStatusInRedis(t *testing.T) {
 	mockPipe.On("ZAdd", ctx, KeyTicksProcessed, []redis.Z{{Score: 101, Member: uint64(101)}}).Return()
 	mockPipe.On("HIncrBy", ctx, "tick:101", "processed", int64(2)).Return()
 	mockPipe.On("HIncrBy", ctx, "tick:101", "skipped", int64(1)).Return()
-	mockPipe.On("HSet", ctx, "tick:101", []interface{}{"total", uint64(12)}).Return()
+	mockPipe.On("HSet", ctx, "tick:101", []interface{}{"total", uint64(13)}).Return()
 	mockPipe.On("Exec", ctx).Return([]redis.Cmder{}, nil)
 
 	batch, err := store.updateStatusInRedis(ctx, highestTick)
@@ -213,8 +213,8 @@ func TestUpdateTickHeight(t *testing.T) {
 	newTick := uint64(101)
 
 	// Prepare data in accumulator
-	store.accumulator.AddProcessed(newTick, 1, false)
-	store.accumulator.AddProcessed(newTick, 2, true) // Total 2, Processed 2, Skipped 0
+	store.accumulator.AddProcessed(newTick, 0, false)
+	store.accumulator.AddProcessed(newTick, 1, true) // Total 2, Processed 2, Skipped 0
 
 	// 1. Fetch highest tick
 	mockRedis.On("HGetUint64", ctx, KeyHighestTick, "tickNumber").Return(currentHighest, nil)

@@ -44,9 +44,9 @@ func TestStoreIntegration(t *testing.T) {
 	// 4. Scenario: Process logs for tick 1000
 	// 1000 is higher than current (0)
 	tickNum := uint64(1000)
-	store.AddProcessed(domain.LogEvent{TickNumber: tickNum, Index: 1, LastLogForTick: false})
-	store.AddSkipped(domain.LogEvent{TickNumber: tickNum, Index: 2, LastLogForTick: false})  // Skipped
-	store.AddProcessed(domain.LogEvent{TickNumber: tickNum, Index: 3, LastLogForTick: true}) // Total 3
+	store.AddProcessed(domain.LogEvent{TickNumber: tickNum, Index: 0, LastLogForTick: false})
+	store.AddSkipped(domain.LogEvent{TickNumber: tickNum, Index: 1, LastLogForTick: false})  // Skipped
+	store.AddProcessed(domain.LogEvent{TickNumber: tickNum, Index: 2, LastLogForTick: true}) // Total 3
 
 	// Update tick height
 	err = store.UpdateTickHeight(ctx)
@@ -73,9 +73,9 @@ func TestStoreIntegration(t *testing.T) {
 
 	// 5. Scenario: Move to tick 1001 and ensure cleanup of 1000
 	nextTickNum := uint64(1001)
+	store.AddSkipped(domain.LogEvent{TickNumber: nextTickNum, Index: 0, LastLogForTick: false})  // Skipped
 	store.AddSkipped(domain.LogEvent{TickNumber: nextTickNum, Index: 1, LastLogForTick: false})  // Skipped
-	store.AddSkipped(domain.LogEvent{TickNumber: nextTickNum, Index: 2, LastLogForTick: false})  // Skipped
-	store.AddProcessed(domain.LogEvent{TickNumber: nextTickNum, Index: 3, LastLogForTick: true}) // Total 1
+	store.AddProcessed(domain.LogEvent{TickNumber: nextTickNum, Index: 2, LastLogForTick: true}) // Total 1
 
 	err = store.UpdateTickHeight(ctx)
 	require.NoError(t, err)

@@ -26,9 +26,7 @@ func (a *Accumulator) AddProcessed(tickNumber, index uint64, isLastLog bool) {
 	tickStatus := a.getTick(tickNumber)
 	tickStatus.Processed++
 
-	if isLastLog {
-		tickStatus.Total = index
-	}
+	setTotalIfLastLog(tickStatus, index, isLastLog)
 }
 
 func (a *Accumulator) AddSkipped(tickNumber, index uint64, isLastLog bool) {
@@ -38,8 +36,12 @@ func (a *Accumulator) AddSkipped(tickNumber, index uint64, isLastLog bool) {
 	tickStatus := a.getTick(tickNumber)
 	tickStatus.Skipped++
 
+	setTotalIfLastLog(tickStatus, index, isLastLog)
+}
+
+func setTotalIfLastLog(tickStatus *TickStatus, index uint64, isLastLog bool) {
 	if isLastLog {
-		tickStatus.Total = index
+		tickStatus.Total = index + 1
 	}
 }
 
