@@ -91,7 +91,7 @@ func (s *Store) updateStatusInRedis(ctx context.Context, highestTickNumber uint6
 			if status.Total > 0 {
 				pipe.HSet(ctx, key, "total", status.Total)
 			}
-			log.Printf("[DEBUG] tick %d: processed %d, skipped %d, total %d", tickNumber, status.Processed, status.Skipped, status.Total)
+			// log.Printf("[DEBUG] update tick %d: processed %d, skipped %d, total %d", tickNumber, status.Processed, status.Skipped, status.Total)
 		}
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
@@ -143,7 +143,7 @@ func (s *Store) setHighestTick(ctx context.Context, updatedTickNumbers []uint64,
 
 	// update highest tick number and count
 	if newHighestTickNumber > highestTickNumber {
-		log.Printf("[DEBUG] highest tick [%d] with [%d] logs.", newHighestTickNumber, newHighestCount)
+		log.Printf("Set highest tick: [%d] (%d processed logs).", newHighestCount, newHighestTickNumber)
 		_, err := s.redisClient.HSet(ctx, "tick:highest", "tickNumber", newHighestTickNumber, "count", newHighestCount)
 		if err != nil {
 			return 0, fmt.Errorf("setting highest tick: %w", err)
