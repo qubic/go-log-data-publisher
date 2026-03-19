@@ -3,7 +3,7 @@ name: Create log events consumer image (branch)
 on:
   push:
     branches:
-      - 'feature/asset-mgmt-transfer'
+      - 'feature/publish-ingestion-status'
     paths:
       - 'log-events-consumer/**'
       - '.github/workflows/push-docker-log-events-consumer-branch.yml'
