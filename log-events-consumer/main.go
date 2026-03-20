@@ -135,25 +135,27 @@ func run() error {
 	}
 	elasticCl := elastic.NewClient(esClient, cfg.Elastic.IndexName)
 
-	redisCl := redis.CreateClient(&goredis.FailoverOptions{
-		MasterName:       cfg.Redis.MasterName,
-		SentinelAddrs:    cfg.Redis.SentinelHosts,
-		SentinelPassword: cfg.Redis.SentinelPassword,
-		Password:         cfg.Redis.Password,
-		DB:               cfg.Redis.DB,
-		DialTimeout:      cfg.Redis.DialTimeout,
-		ReadTimeout:      cfg.Redis.ReadTimeout,
-		WriteTimeout:     cfg.Redis.WriteTimeout,
-		PoolSize:         cfg.Redis.PoolSize,
-	})
-	defer redisCl.Close()
-	pong, err := redisCl.Ping(context.Background())
-	if err != nil {
-		return fmt.Errorf("connecting to redis: %w", err)
+	var tickStore consume.TickStore = &tickstore.NoOpStore{}
+	if cfg.Redis.Enabled {
+		redisCl := redis.CreateClient(&goredis.FailoverOptions{
+			MasterName:       cfg.Redis.MasterName,
+			SentinelAddrs:    cfg.Redis.SentinelHosts,
+			SentinelPassword: cfg.Redis.SentinelPassword,
+			Password:         cfg.Redis.Password,
+			DB:               cfg.Redis.DB,
+			DialTimeout:      cfg.Redis.DialTimeout,
+			ReadTimeout:      cfg.Redis.ReadTimeout,
+			WriteTimeout:     cfg.Redis.WriteTimeout,
+			PoolSize:         cfg.Redis.PoolSize,
+		})
+		defer redisCl.Close()
+		pong, err := redisCl.Ping(context.Background())
+		if err != nil {
+			return fmt.Errorf("connecting to redis: %w", err)
+		}
+		log.Printf("Connected to redis: %s", pong)
+		tickStore = tickstore.NewStore(redisCl)
 	}
-	log.Printf("Connected to redis: %s", pong)
-
-	tickStore := tickstore.NewStore(redisCl)
 
 	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
 	consumer := consume.NewConsumer(kafkaCl, elasticCl, tickStore, consumeMetrics, supportedTypes)
