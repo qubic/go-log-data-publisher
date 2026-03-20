@@ -300,7 +300,7 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		p.tickForIndex = result.Tick
 	}
 
-	// Drain index if processing a different tick than what tickEventIndex was recovered/set for.
+	// Reset index if processing a different tick than what tickEventIndex was recovered/set for.
 	if p.tickForIndex != 0 && p.tickForIndex != result.Tick {
 		p.tickEventIndex = 0
 		p.tickForIndex = result.Tick
