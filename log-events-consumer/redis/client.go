@@ -46,15 +46,6 @@ func (c *Client) HSet(ctx context.Context, key string, values ...interface{}) (i
 
 func (c *Client) ZRange(ctx context.Context, z redis.ZRangeArgs) ([]string, error) {
 	return c.Rdb.ZRangeArgs(ctx, z).Result()
-	/*
-		redis.ZRangeArgs{
-				Key:     key,
-				Start:   "-inf",
-				Stop:    fmt.Sprintf("(%d", highestTick),
-				ByScore: true,
-			}
-	*/
-
 }
 
 func (c *Client) Close() {

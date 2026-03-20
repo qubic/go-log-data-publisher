@@ -82,7 +82,6 @@ func (c *Consumer) Consume(ctx context.Context) error {
 }
 
 func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
-	var err error
 	defer c.kafkaClient.AllowRebalance()
 	fetches := c.kafkaClient.PollRecords(ctx, 1000)
 	if errors := fetches.Errors(); len(errors) > 0 {
@@ -147,14 +146,14 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 	}
 
 	if len(documents) > 0 { // only try to index if there are documents to index
-		err = c.elasticClient.BulkIndex(ctx, documents)
+		err := c.elasticClient.BulkIndex(ctx, documents)
 		if err != nil {
 			return -1, fmt.Errorf("bulk indexing [%d] documents: %w", len(documents), err)
 		}
 	}
 	c.consumeMetrics.SetProcessedTick(c.currentEpoch, c.highestTick)
 
-	err = c.kafkaClient.CommitUncommittedOffsets(ctx)
+	err := c.kafkaClient.CommitUncommittedOffsets(ctx)
 	if err != nil {
 		return -1, fmt.Errorf("committing offsets: %w", err)
 	}
