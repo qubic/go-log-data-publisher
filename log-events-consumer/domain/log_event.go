@@ -38,6 +38,7 @@ type LogEvent struct {
 	Timestamp       uint64         `json:"timestamp"`
 	BodySize        uint32         `json:"bodySize"`
 	Body            map[string]any `json:"body"`
+	LastLogForTick  bool           `json:"lastLogForTick"`
 }
 
 func (le *LogEvent) IsSupported(supportedMap map[uint64][]int16) bool {

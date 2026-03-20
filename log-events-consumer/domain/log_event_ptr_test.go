@@ -122,26 +122,41 @@ func TestLogEventPtr_ToLogEvent_OptionalFields(t *testing.T) {
 		"index": 1,
 		"type": 0,
 		"bodySize": 10,
-		"body": {"foo": "bar"}
+		"body": {"foo": "bar"},
+ 		"lastLogForTick": true
 	}`
 
 	var lep LogEventPtr
 	err := json.Unmarshal([]byte(jsonInput), &lep)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal JSON: %v", err)
-	}
+	require.NoError(t, err)
 
 	le, err := lep.ToLogEvent()
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if le.BodySize != 10 {
-		t.Errorf("Expected bodySize 10, got %d", le.BodySize)
-	}
-	if le.Body["foo"] != "bar" {
-		t.Errorf("Expected body['foo'] = 'bar', got %v", le.Body["foo"])
-	}
+	require.Equal(t, 10, int(le.BodySize))
+	require.Equal(t, "bar", le.Body["foo"])
+	require.Equal(t, true, le.LastLogForTick)
+}
+
+func TestLogEventPtr_ToLogEventWithoutLastLogOfTick_ThenFalse(t *testing.T) {
+	jsonInput := `{
+		"epoch": 1,
+		"tickNumber": 100,
+		"logId": 123,
+		"timestamp": 123456789,
+        "logDigest": "digest",
+		"index": 1,
+		"type": 0
+	}`
+
+	var lep LogEventPtr
+	err := json.Unmarshal([]byte(jsonInput), &lep)
+	require.NoError(t, err)
+
+	le, err := lep.ToLogEvent()
+	require.NoError(t, err)
+
+	require.Equal(t, false, le.LastLogForTick)
 }
 
 func TestLogEventPtr_ToLogEvent_InvalidZeroFields(t *testing.T) {

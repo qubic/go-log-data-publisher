@@ -16,6 +16,7 @@ type LogEventPtr struct {
 	Timestamp       *uint64         `json:"timestamp"`
 	BodySize        *uint32         `json:"bodySize"`
 	Body            *map[string]any `json:"body"`
+	LastLogForTick  bool            `json:"lastLogForTick"` // default to 'false' if missing
 }
 
 // ToLogEvent converts the pointer-based LogEventPtr into a concrete LogEvent.
@@ -93,5 +94,6 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 		Timestamp:       *lep.Timestamp,
 		BodySize:        bodySize,
 		Body:            body,
+		LastLogForTick:  lep.LastLogForTick,
 	}, nil
 }

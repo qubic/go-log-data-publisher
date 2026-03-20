@@ -11,6 +11,7 @@ import (
 	"github.com/qubic/log-events-consumer/domain"
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
+	"github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -24,19 +25,34 @@ type ElasticClient interface {
 	BulkIndex(ctx context.Context, data []*elastic.EsDocument) error
 }
 
+type RedisClient interface {
+	Pipeline() redis.Pipeliner
+	HGetUint64(ctx context.Context, key, field string) (uint64, error)
+	HSet(ctx context.Context, key string, values ...interface{}) (int64, error)
+	ZRange(ctx context.Context, z redis.ZRangeArgs) ([]string, error)
+}
+
+type TickStore interface {
+	AddProcessed(log domain.LogEvent)
+	AddSkipped(log domain.LogEvent)
+	UpdateTickHeight(ctx context.Context) error
+}
+
 type Consumer struct {
 	kafkaClient       KafkaClient
 	elasticClient     ElasticClient
+	tickStore         TickStore
 	consumeMetrics    *metrics.Metrics
 	supportedLogTypes map[uint64][]int16
-	currentTick       uint32
+	highestTick       uint32
 	currentEpoch      uint32
 }
 
-func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
+func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, tickStore TickStore, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
 	return &Consumer{
 		kafkaClient:       kafkaClient,
 		elasticClient:     elasticClient,
+		tickStore:         tickStore,
 		consumeMetrics:    metrics,
 		supportedLogTypes: supportedEventLogTypes,
 	}
@@ -57,7 +73,7 @@ func (c *Consumer) Consume(ctx context.Context) error {
 				return fmt.Errorf("consuming batch: %w", err)
 			}
 			if count > 0 {
-				log.Printf("Processed [%d] records. Tick: [%d]", count, c.currentTick)
+				log.Printf("Ingested [%d] records. Highest tick: [%d]", count, c.highestTick)
 			}
 
 		}
@@ -94,6 +110,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		// basic filters before elastic conversion
 		if !logEvent.IsSupported(c.supportedLogTypes) {
+			c.tickStore.AddSkipped(logEvent)
 			continue
 		}
 
@@ -104,6 +121,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		// filter event logs that need conversion
 		if !logEventElastic.IsSupported() {
+			c.tickStore.AddSkipped(logEvent)
 			continue
 		}
 
@@ -119,24 +137,32 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 		})
 
 		// we know that tick number cannot exceed uint32 according to current core code
-		if uint32(logEvent.TickNumber) > c.currentTick {
-			c.currentTick = uint32(logEvent.TickNumber)
+		if uint32(logEvent.TickNumber) > c.highestTick {
+			c.highestTick = uint32(logEvent.TickNumber)
 			c.currentEpoch = logEvent.Epoch
 		}
 		c.consumeMetrics.IncProcessedMessages()
+		c.tickStore.AddProcessed(logEvent)
 	}
 
-	err := c.elasticClient.BulkIndex(ctx, documents)
-	if err != nil {
-		return -1, fmt.Errorf("bulk indexing [%d] documents: %w", len(documents), err)
+	if len(documents) > 0 { // only try to index if there are documents to index
+		err := c.elasticClient.BulkIndex(ctx, documents)
+		if err != nil {
+			return -1, fmt.Errorf("bulk indexing [%d] documents: %w", len(documents), err)
+		}
 	}
-	c.consumeMetrics.SetProcessedTick(c.currentEpoch, c.currentTick)
+	c.consumeMetrics.SetProcessedTick(c.currentEpoch, c.highestTick)
 
-	err = c.kafkaClient.CommitUncommittedOffsets(ctx)
+	err := c.kafkaClient.CommitUncommittedOffsets(ctx)
 	if err != nil {
 		return -1, fmt.Errorf("committing offsets: %w", err)
 	}
 
+	err = c.tickStore.UpdateTickHeight(ctx) // for processing status
+	if err != nil {
+		// maybe we want only log here
+		return -1, fmt.Errorf("updating tick height: %w", err)
+	}
 	return len(documents), nil
 }
 

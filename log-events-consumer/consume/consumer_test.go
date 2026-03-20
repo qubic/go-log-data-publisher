@@ -9,6 +9,7 @@ import (
 	"github.com/qubic/log-events-consumer/domain"
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
+	"github.com/qubic/log-events-consumer/tickstore"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -45,6 +46,7 @@ func (m *mockElasticClient) BulkIndex(ctx context.Context, data []*elastic.EsDoc
 }
 
 func TestConsumeBatch_Success(t *testing.T) {
+
 	// Create JSON as it would come from Kafka (numbers are float64 after unmarshaling)
 	logEventJSON := []byte(`{
 		"epoch": 100,
@@ -95,7 +97,7 @@ func TestConsumeBatch_Success(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_success")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -144,8 +146,8 @@ func TestConsumeBatch_Success(t *testing.T) {
 		t.Error("Expected 'body' field to not exist in elastic document")
 	}
 
-	if consumer.currentTick != 1000 {
-		t.Errorf("Expected currentTick to be 1000, got: %d", consumer.currentTick)
+	if consumer.highestTick != 1000 {
+		t.Errorf("Expected currentTick to be 1000, got: %d", consumer.highestTick)
 	}
 
 	if consumer.currentEpoch != 100 {
@@ -166,7 +168,7 @@ func TestConsumeBatch_EmptyBatch(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_empty")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -205,7 +207,7 @@ func TestConsumeBatch_InvalidJSON(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_invalid")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -255,7 +257,7 @@ func TestConsumeBatch_ConversionError(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_conversion_error")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -308,7 +310,7 @@ func TestConsumeBatch_ElasticError(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_elastic_err")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -359,7 +361,7 @@ func TestConsumeBatch_CommitError(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_commit_err")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	_, err := consumer.consumeBatch(context.Background())
 
@@ -433,7 +435,7 @@ func TestConsumeBatch_MultipleRecords(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_multiple")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -449,8 +451,8 @@ func TestConsumeBatch_MultipleRecords(t *testing.T) {
 		t.Fatalf("Expected 2 documents to be indexed, got: %d", len(indexedDocs))
 	}
 
-	if consumer.currentTick != 1001 {
-		t.Errorf("Expected currentTick to be 1001 (highest), got: %d", consumer.currentTick)
+	if consumer.highestTick != 1001 {
+		t.Errorf("Expected currentTick to be 1001 (highest), got: %d", consumer.highestTick)
 	}
 }
 
@@ -463,7 +465,7 @@ func TestConsume_ContextCancellation(t *testing.T) {
 
 	mockElastic := &mockElasticClient{}
 	m := metrics.NewMetrics("test_context_cancel")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -658,7 +660,7 @@ func TestConsumeBatch_filterIfLogIsNotSupported(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics("test_supported_filter_" + tt.name)
-			consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 13, 255}})
+			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 13, 255}})
 
 			count, err := consumer.consumeBatch(context.Background())
 			if err != nil {
@@ -735,7 +737,7 @@ func TestConsumeBatch_FilterEmptyTransfers(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_filter")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
@@ -820,7 +822,7 @@ func TestConsumeBatch_IDUniqueness(t *testing.T) {
 	}
 
 	m := metrics.NewMetrics("test_id_uniqueness")
-	consumer := NewConsumer(mockKafka, mockElastic, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+	consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
 	count, err := consumer.consumeBatch(context.Background())
 
