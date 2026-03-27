@@ -68,12 +68,12 @@ func (c *Consumer) Consume(ctx context.Context) error {
 			return nil
 
 		default:
-			count, err := c.consumeBatch(ctx)
+			records, docs, err := c.consumeBatch(ctx)
 			if err != nil {
 				return fmt.Errorf("consuming batch: %w", err)
 			}
-			if count > 0 {
-				log.Printf("Ingested [%d] records. Highest tick: [%d]", count, c.highestTick)
+			if records > 0 {
+				log.Printf("Processed: [%d]. Indexed: [%d]. Highest tick: [%d]", records, docs, c.highestTick)
 			}
 
 		}
@@ -81,31 +81,33 @@ func (c *Consumer) Consume(ctx context.Context) error {
 	return nil
 }
 
-func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
+func (c *Consumer) consumeBatch(ctx context.Context) (int, int, error) {
 	defer c.kafkaClient.AllowRebalance()
 	fetches := c.kafkaClient.PollRecords(ctx, 1000)
 	if errors := fetches.Errors(); len(errors) > 0 {
 		for _, err := range errors {
 			log.Printf("Fetches error: %v", err)
 		}
-		return -1, fmt.Errorf("fetching records")
+		return -1, -1, fmt.Errorf("fetching records")
 	}
 
+	var recordCount int
 	var documents []*elastic.EsDocument
 	iter := fetches.RecordIter()
 	for !iter.Done() {
 		record := iter.Next()
+		recordCount++
 
 		var raw domain.LogEventPtr
 		err := unmarshallLogEvent(record, &raw)
 		if err != nil {
-			return -1, fmt.Errorf("unmarshalling raw log event [%s]: %w", string(record.Value), err)
+			return -1, -1, fmt.Errorf("unmarshalling raw log event [%s]: %w", string(record.Value), err)
 		}
 
 		logEvent, err := raw.ToLogEvent()
 		if err != nil {
 			log.Printf("[ERROR] converting raw log event [%v]: %v", raw, err)
-			return -1, fmt.Errorf("converting to log event: %w", err)
+			return -1, -1, fmt.Errorf("converting to log event: %w", err)
 		}
 
 		// basic filters before elastic conversion
@@ -116,7 +118,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		logEventElastic, err := logEvent.ToLogEventElastic()
 		if err != nil {
-			return -1, fmt.Errorf("converting to elastic format [%s]: %w", string(record.Value), err)
+			return -1, -1, fmt.Errorf("converting to elastic format [%s]: %w", string(record.Value), err)
 		}
 
 		// filter event logs that need conversion
@@ -127,7 +129,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 
 		val, err := json.Marshal(logEventElastic)
 		if err != nil {
-			return -1, fmt.Errorf("marshalling log event [value=%v]: %w", logEvent, err)
+			return -1, -1, fmt.Errorf("marshalling log event [value=%v]: %w", logEvent, err)
 		}
 
 		// Use separator to prevent ID collisions (e.g., epoch=1,logId=23 vs epoch=12,logId=3).
@@ -148,22 +150,22 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, error) {
 	if len(documents) > 0 { // only try to index if there are documents to index
 		err := c.elasticClient.BulkIndex(ctx, documents)
 		if err != nil {
-			return -1, fmt.Errorf("bulk indexing [%d] documents: %w", len(documents), err)
+			return -1, -1, fmt.Errorf("bulk indexing [%d] documents: %w", len(documents), err)
 		}
 	}
 	c.consumeMetrics.SetProcessedTick(c.currentEpoch, c.highestTick)
 
 	err := c.kafkaClient.CommitUncommittedOffsets(ctx)
 	if err != nil {
-		return -1, fmt.Errorf("committing offsets: %w", err)
+		return -1, -1, fmt.Errorf("committing offsets: %w", err)
 	}
 
 	err = c.tickStore.UpdateTickHeight(ctx) // for processing status
 	if err != nil {
 		// maybe we want only log here
-		return -1, fmt.Errorf("updating tick height: %w", err)
+		return -1, -1, fmt.Errorf("updating tick height: %w", err)
 	}
-	return len(documents), nil
+	return recordCount, len(documents), nil
 }
 
 func unmarshallLogEvent(record *kgo.Record, target any) error {

@@ -66,7 +66,7 @@ func TestConsumeBatch_Integration(t *testing.T) {
 			m := metrics.NewMetrics(fmt.Sprintf("test_integration_%d", i))
 			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 255}})
 
-			count, err := consumer.consumeBatch(context.Background())
+			records, docs, err := consumer.consumeBatch(context.Background())
 			require.NoError(t, err)
 
 			// We expect all files in testdata to be supported unless they are specifically designed to be filtered.
@@ -76,7 +76,8 @@ func TestConsumeBatch_Integration(t *testing.T) {
 			err = json.Unmarshal(expectedData, &expectedObj)
 			require.NoError(t, err)
 
-			require.Equal(t, 1, count, "Expected 1 document to be processed for %s", file.Name())
+			require.Greater(t, records, 0)
+			require.Equal(t, 1, docs, "Expected 1 document to be processed for %s", file.Name())
 			require.Len(t, capturedDocs, 1)
 
 			// Verify ID
@@ -138,10 +139,11 @@ func TestConsumeBatch_Filtered_Integration(t *testing.T) {
 			m := metrics.NewMetrics(fmt.Sprintf("test_filtered_integration_%d", i))
 			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
 
-			count, err := consumer.consumeBatch(context.Background())
+			records, docs, err := consumer.consumeBatch(context.Background())
 			require.NoError(t, err)
 
-			require.Equal(t, 0, count, "Expected 0 documents to be processed for %s", file.Name())
+			require.Greater(t, records, 0)
+			require.Equal(t, 0, docs, "Expected 0 documents to be processed for %s", file.Name())
 			require.Empty(t, capturedDocs, "Expected no documents to be indexed for %s", file.Name())
 		})
 	}
