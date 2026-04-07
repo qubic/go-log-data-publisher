@@ -224,6 +224,54 @@ func TestTransformEventBody_AssetPossessionManagingContractChange(t *testing.T) 
 	}
 }
 
+func TestTransformEventBody_OracleQueryStatusChange(t *testing.T) {
+	body := &bob.OracleQueryStatusChangeBody{
+		QueryingEntity: "QUERRYINGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		QueryID:        12345321,
+		InterfaceIndex: 1,
+		Type:           2,
+		Status:         "pending",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeOracleQueryStatusChange, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"queryingEntity": "QUERRYINGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"queryId":        int64(12345321),
+		"interfaceIndex": uint32(1),
+		"type":           uint32(2),
+		"status":         "pending",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTransformEventBody_OracleSubscriberLogMessage(t *testing.T) {
+	body := &bob.OracleSubscriberLogMessageBody{
+		SubscriptionID:        1234321,
+		InterfaceIndex:        2,
+		ContractIndex:         3,
+		PeriodInMilliseconds:  300000,
+		FirstQueryDateAndTime: "2025-01-15T12:00:00",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeOracleSubscriberLogMessage, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"subscriptionId":        int32(1234321),
+		"interfaceIndex":        uint32(2),
+		"contractIndex":         uint32(3),
+		"periodInMilliseconds":  uint32(300000),
+		"firstQueryDateAndTime": "2025-01-15T12:00:00",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTransformEventBody_HexBody(t *testing.T) {
 	body := &bob.HexBody{
 		Hex: "deadbeef0123456789abcdef",
@@ -382,4 +430,3 @@ func TestEventMessage_JSON_IncludesLastLogForTickWhenTrue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"lastLogForTick":true`)
 }
-

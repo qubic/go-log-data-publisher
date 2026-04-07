@@ -18,6 +18,12 @@ make test               # Run tests (go test -v ./...)
 make lint               # Run golangci-lint
 make fmt                # Format code
 
+# Run a single test
+go test -v ./internal/storage/... -run TestEpochMigration
+
+# Run E2E tests (uses mock bob server)
+go test -v ./internal/e2e/...
+
 # Protobuf generation (requires buf CLI)
 make proto              # Regenerate protobuf code from api/events-bridge/v1/
 ```
@@ -29,8 +35,8 @@ This service bridges events from a Qubic bob node to clients via gRPC/REST. It c
 ### Data Flow
 ```
 Bob Node (WebSocket) → Processor → Storage Manager → Epoch DBs (PebbleDB)
-                                                   ↓
-                               gRPC/REST API ← Service Layer
+                                 ↓                 ↓
+                          Kafka Publisher    gRPC/REST API ← Service Layer
 ```
 
 ### Key Components
@@ -38,7 +44,7 @@ Bob Node (WebSocket) → Processor → Storage Manager → Epoch DBs (PebbleDB)
 **Processor** (`internal/processor/processor.go`): Core event loop that:
 - Maintains WebSocket connection to bob with auto-reconnect
 - Subscribes to all log types via tickStream (no logFilters — receives all events)
-- Supported log types: 0 (qu_transfer), 1 (asset_issuance), 2 (asset_ownership_change), 3 (asset_possession_change), 4-7 (contract messages), 8 (burning), 9 (dust_burning), 10 (spectrum_stats), 11 (asset_ownership_managing_contract_change), 12 (asset_possession_managing_contract_change), 13 (contract_reserve_deduction), 255 (custom_message)
+- Supported log types: 0 (qu_transfer), 1 (asset_issuance), 2 (asset_ownership_change), 3 (asset_possession_change), 4-7 (contract messages), 8 (burning), 9 (dust_burning), 10 (spectrum_stats), 11 (asset_ownership_managing_contract_change), 12 (asset_possession_managing_contract_change), 13 (contract_reserve_deduction), 14 (oracle_query_status_change), 15 (oracle_subscriber_log_message), 255 (custom_message)
 - Handles crash recovery via lastTick-based resumption
 - Deduplicates events before storage
 
@@ -52,20 +58,33 @@ Bob Node (WebSocket) → Processor → Storage Manager → Epoch DBs (PebbleDB)
 - Receives all logs for a tick in one `qubic_subscription` notification
 - Subscription with catch-up from startTick for crash recovery
 
+**Kafka Publisher** (`internal/kafka/`): Optional event publishing to Kafka:
+- Enabled via `BOB_EVENTS_KAFKA_ENABLED=true`
+- Transforms bob event bodies to kafka format (field renames per log type — see mappings below)
+- Uses franz-go library; implements `Publisher` interface (with mock for testing)
+
 **gRPC Service** (`internal/grpc/`): Exposes two endpoints:
 - `GetStatus` (GET /v1/status): Returns epochs with tick intervals and event counts
 - `GetEventsForTick` (POST /v1/getEventsForTick): Returns all events for a tick
+
+**Metrics** (`internal/metrics/`): Prometheus metrics on a separate port (default 9999) with `/health` endpoint.
 
 ### Configuration
 
 Environment variables prefixed with `BOB_EVENTS_`:
 - `BOB_EVENTS_BOB_WEBSOCKETURL` (default: `ws://localhost:40420/ws/qubic`)
+- `BOB_EVENTS_BOB_STATUSURL` (default: `http://localhost:40420/status`)
 - `BOB_EVENTS_STORAGE_BASEPATH` (default: `data/bob-events-bridge`)
 - `BOB_EVENTS_SERVER_GRPCADDR` (default: `0.0.0.0:8001`)
 - `BOB_EVENTS_SERVER_HTTPADDR` (default: `0.0.0.0:8000`)
 - `BOB_EVENTS_BOB_OVERRIDESTARTTICK` (default: `false`)
 - `BOB_EVENTS_BOB_STARTTICK` (default: `0`)
 - `BOB_EVENTS_DEBUG` (default: `false`)
+- `BOB_EVENTS_KAFKA_ENABLED` (default: `false`)
+- `BOB_EVENTS_KAFKA_BROKERS` (default: `localhost:9092`)
+- `BOB_EVENTS_KAFKA_TOPIC` (default: `qubic-events`)
+- `BOB_EVENTS_METRICS_PORT` (default: `9999`)
+- `BOB_EVENTS_METRICS_NAMESPACE` (default: `qubic_events_bridge`)
 
 ### Protobuf
 
@@ -292,6 +311,30 @@ Events with `"ok": false` are skipped by the processor.
 }
 ```
 
+**Type 14 — oracle_query_status_change**
+**bob format & kafka format** (no field renames)
+```json
+{
+  "queryingEntity": "<qubic_address>",
+  "queryId": <int64>,
+  "interfaceIndex": <uint32>,
+  "type": <uint32>,
+  "status": "<string>"
+}
+```
+
+**Type 15 — oracle_subscriber_log_message**
+**bob format & kafka format** (no field renames)
+```json
+{
+  "subscriptionId": <int32>,
+  "interfaceIndex": <uint32>,
+  "contractIndex": <uint32>,
+  "periodInMilliseconds": <uint32>,
+  "firstQueryDateAndTime": "<string>"
+}
+```
+
 **Type 255 — custom_message**
 **bob format & kafka format** (no field renames)
 ```json
@@ -320,6 +363,13 @@ Events with `"ok": false` are skipped by the processor.
 All public keys/addresses are 60-character uppercase Qubic addresses.
 
 ## Development Notes
+
+### Testing
+
+- Unit tests use `testify/assert` and `testify/require` for assertions
+- E2E tests (`internal/e2e/`) spin up a mock bob WebSocket server (`mock_bob_server.go`) and test the full pipeline
+- Kafka publishing is tested via `internal/kafka/mock.go` which implements the `Publisher` interface
+- The `Publisher` interface (`internal/kafka/publisher.go`) allows swapping real Kafka for mocks in tests
 
 ### Event Body Encoding
 

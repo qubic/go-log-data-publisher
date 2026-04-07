@@ -21,6 +21,8 @@ const (
 	LogTypeAssetOwnershipManagingContractChange  uint32 = 11
 	LogTypeAssetPossessionManagingContractChange uint32 = 12
 	LogTypeContractReserveDeduction              uint32 = 13
+	LogTypeOracleQueryStatusChange               uint32 = 14
+	LogTypeOracleSubscriberLogMessage            uint32 = 15
 	LogTypeCustomMessage                         uint32 = 255
 )
 
@@ -39,6 +41,8 @@ var LogTypeNames = map[uint32]string{
 	LogTypeAssetOwnershipManagingContractChange:  "asset_ownership_managing_contract_change",
 	LogTypeAssetPossessionManagingContractChange: "asset_possession_managing_contract_change",
 	LogTypeContractReserveDeduction:              "contract_reserve_deduction",
+	LogTypeOracleQueryStatusChange:               "oracle_query_status_change",
+	LogTypeOracleSubscriberLogMessage:            "oracle_subscriber_log_message",
 	LogTypeCustomMessage:                         "custom_message",
 }
 
@@ -84,13 +88,6 @@ type BurningBody struct {
 	ContractIndexBurnedFor uint32 `json:"contractIndexBurnedFor"`
 }
 
-// ContractReserveDeductionBody represents the body of a contract_reserve_deduction event (log type 13)
-type ContractReserveDeductionBody struct {
-	DeductedAmount  uint64 `json:"deductedAmount"`
-	RemainingAmount int64  `json:"remainingAmount"`
-	ContractIndex   uint32 `json:"contractIndex"`
-}
-
 // ContractMessageBody represents the body of contract message events (log types 4-7)
 type ContractMessageBody struct {
 	SCIndex   uint32 `json:"scIndex"`
@@ -117,6 +114,31 @@ type AssetPossessionManagingContractChangeBody struct {
 	DestinationContractIndex uint32 `json:"destinationContractIndex"`
 	NumberOfShares           int64  `json:"numberOfShares"`
 	AssetName                string `json:"assetName"`
+}
+
+// ContractReserveDeductionBody represents the body of a contract_reserve_deduction event (log type 13)
+type ContractReserveDeductionBody struct {
+	DeductedAmount  uint64 `json:"deductedAmount"`
+	RemainingAmount int64  `json:"remainingAmount"`
+	ContractIndex   uint32 `json:"contractIndex"`
+}
+
+// OracleQueryStatusChangeBody represents the body of an oracle_query_status_change event (log type 14)
+type OracleQueryStatusChangeBody struct {
+	QueryingEntity string `json:"queryingEntity"`
+	QueryID        int64  `json:"queryId"`
+	InterfaceIndex uint32 `json:"interfaceIndex"`
+	Type           uint32 `json:"type"`
+	Status         string `json:"status"`
+}
+
+// OracleSubscriberLogMessageBody represents the body of an oracle_subscriber_log_message (log type 15)
+type OracleSubscriberLogMessageBody struct {
+	SubscriptionID        int32  `json:"subscriptionId"`
+	InterfaceIndex        uint32 `json:"interfaceIndex"`
+	ContractIndex         uint32 `json:"contractIndex"`
+	PeriodInMilliseconds  uint32 `json:"periodInMilliseconds"`
+	FirstQueryDateAndTime string `json:"firstQueryDateAndTime"`
 }
 
 // HexBody represents the body of hex-encoded events (log types 9, 10) and the default for unknown types
@@ -160,6 +182,10 @@ func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 		target = &HexBody{}
 	case LogTypeContractReserveDeduction:
 		target = &ContractReserveDeductionBody{}
+	case LogTypeOracleQueryStatusChange:
+		target = &OracleQueryStatusChangeBody{}
+	case LogTypeOracleSubscriberLogMessage:
+		target = &OracleSubscriberLogMessageBody{}
 	case LogTypeCustomMessage:
 		target = &CustomMessageBody{}
 	default:
