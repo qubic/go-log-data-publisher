@@ -1,6 +1,6 @@
 module github.com/qubic/bob-events-bridge
 
-go 1.24.0
+go 1.26.0
 
 require (
 	github.com/ardanlabs/conf/v3 v3.1.7

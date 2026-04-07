@@ -18,7 +18,7 @@ jobs:
     if: "!startsWith(github.ref, 'refs/tags/')"
     strategy:
       matrix:
-        go-version: [1.25.x]
+        go-version: [1.26.x]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -37,7 +37,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
@@ -50,6 +50,6 @@ jobs:
       - id: govulncheck
         uses: golang/govulncheck-action@v1
         with:
-          go-version-input: '1.25' # Change this to your project's Go version
+          go-version-input: '1.26' # Change this to your project's Go version
           go-package: ./...
           work-dir: bob-events-bridge
