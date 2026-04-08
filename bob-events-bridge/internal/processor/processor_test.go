@@ -198,7 +198,7 @@ func TestIsNonRetriableKafkaError(t *testing.T) {
 		},
 		{
 			name:     "wrapped non-retriable kerr error",
-			err:      fmt.Errorf("failed to publish batch to kafka: %w", kerr.TopicAuthorizationFailed),
+			err:      fmt.Errorf("test error: %w", kerr.TopicAuthorizationFailed),
 			expected: true,
 		},
 		{
@@ -208,7 +208,7 @@ func TestIsNonRetriableKafkaError(t *testing.T) {
 		},
 		{
 			name:     "wrapped retriable kerr error",
-			err:      fmt.Errorf("failed to publish batch to kafka: %w", kerr.NotEnoughReplicas),
+			err:      fmt.Errorf("test error: %w", kerr.NotEnoughReplicas),
 			expected: false,
 		},
 		{
