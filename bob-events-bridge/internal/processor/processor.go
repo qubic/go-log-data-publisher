@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/qubic/bob-events-bridge/internal/kafka"
 	"github.com/qubic/bob-events-bridge/internal/metrics"
 	"github.com/qubic/bob-events-bridge/internal/storage"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -127,6 +129,10 @@ func (p *Processor) Start(ctx context.Context) error {
 		}
 
 		if err := p.connectAndProcess(ctx); err != nil {
+			if isNonRetriableKafkaError(err) {
+				return fmt.Errorf("non-retriable kafka error: %w", err)
+			}
+
 			p.logger.Error("Processing error, will reconnect",
 				zap.Error(err))
 
@@ -219,6 +225,7 @@ func (p *Processor) processMessages(ctx context.Context) error {
 			p.client.SetConnected(false)
 			if flushErr := p.flushBatch(context.Background()); flushErr != nil {
 				p.logger.Warn("Failed to flush batch on disconnect", zap.Error(flushErr))
+				return fmt.Errorf("flush on disconnect: %w", flushErr)
 			}
 			return fmt.Errorf("read error: %w", err)
 		}
@@ -469,4 +476,12 @@ func (p *Processor) IsRunning() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.running
+}
+
+// isNonRetriableKafkaError returns true if the error wraps a non-retriable kerr.Error.
+func isNonRetriableKafkaError(err error) bool {
+	if kafkaErr, ok := errors.AsType[*kerr.Error](err); ok {
+		return !kafkaErr.Retriable
+	}
+	return false
 }
