@@ -189,6 +189,10 @@ func inferCategory(transactionHash string) (byte, bool, error) {
 	prefix := transactionHash[:lastUnderscore] // remove postfix
 	value, ok := sysTransactionMap[prefix]     // find known category
 	if !ok {
+		// handle malformed bob format SC_NOTIFICATION_TX12345 instead of SC_NOTIFICATION_TX_12345
+		if strings.HasPrefix(transactionHash, "SC_NOTIFICATION_TX") {
+			return 6, true, nil
+		}
 		return 0, false, fmt.Errorf("unexpected special event log type [%s]", transactionHash)
 	}
 
