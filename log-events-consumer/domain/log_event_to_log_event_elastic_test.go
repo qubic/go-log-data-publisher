@@ -77,7 +77,7 @@ func TestLogEvent_ToLogEventElastic_SpecialSystemTransactions(t *testing.T) {
 			}
 
 			// Verify categories are set correctly
-			if result.Categories == nil || len(result.Categories) == 0 {
+			if len(result.Categories) == 0 {
 				t.Fatalf("expected Categories to be set, got nil or empty")
 			}
 			if result.Categories[0] != tt.expectedCategory {

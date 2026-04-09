@@ -356,12 +356,18 @@ func handleAssetManagementTransfer(lee *LogEventElastic, body map[string]any, is
 		return fmt.Errorf("missing or invalid source contract index")
 	}
 	lee.SourceContractIndex, err = toUint64(sourceContractIndex)
+	if err != nil {
+		return fmt.Errorf("converting source contract index: %w", err)
+	}
 
 	destinationContractIndex, ok := body["destinationContractIndex"].(float64)
 	if !ok {
 		return fmt.Errorf("missing or invalid destination contract index")
 	}
 	lee.DestinationContractIndex, err = toUint64(destinationContractIndex)
+	if err != nil {
+		return fmt.Errorf("converting destination contract index: %w", err)
+	}
 
 	owner, ok := body["owner"].(string)
 	if !ok {
