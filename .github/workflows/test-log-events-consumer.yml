@@ -6,13 +6,17 @@ on:
     paths:
       - 'log-events-consumer/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 name: Test log events consumer
 
 jobs:
   test-nocache:
     strategy:
       matrix:
-        go-version: [1.25.x]
+        go-version: [1.26.x]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -23,3 +27,27 @@ jobs:
           cache: false
       - run: go test -p 1 -tags ci ./...
         working-directory: log-events-consumer
+  lint:
+    name: Lint log events consumer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.26.x
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.9
+          working-directory: log-events-consumer
+  govulncheck:
+    runs-on: ubuntu-latest
+    name: Run govulncheck v2
+    steps:
+      - id: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: '1.26'
+          go-package: ./...
+          work-dir: log-events-consumer

@@ -1,15 +1,33 @@
-name: Deploy bob-events-bridge prod images to GHCR
+name: Create bob events bridge dev image
 
 on:
   push:
     branches:
-      - 25-bob-events-bridge-add-last-log-flag
+      - 33-oracle-log-types
     paths:
       - 'bob-events-bridge/**'
+      - '.github/workflows/push-docker-bob-events-bridge-dev.yaml'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.26.x
+          cache: false
+
+      - name: Run tests
+        run: go test -p 1 -tags ci ./...
+        working-directory: bob-events-bridge
+
   docker-publish:
     runs-on: ubuntu-latest
+    needs: test
 
     permissions:
       contents: read
@@ -29,19 +47,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract module and version from tag
-        id: extract
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          MODULE_NAME=$(echo "$TAG" | cut -d/ -f1)
-          VERSION=$(echo "$TAG" | cut -d/ -f2)
-          echo "module=$MODULE_NAME" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: ./bob-events-bridge
           file: ./bob-events-bridge/Dockerfile
           push: true
-          tags: ghcr.io/qubic/bob-events-bridge:25-bob-events-bridge-add-last-log-flag
+          tags: ghcr.io/qubic/bob-events-bridge:33-oracle-log-types
