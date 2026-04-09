@@ -64,7 +64,7 @@ func TestConsumeBatch_Integration(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics(fmt.Sprintf("test_integration_%d", i))
-			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 255}})
+			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14, 15, 255}})
 
 			records, docs, err := consumer.consumeBatch(context.Background())
 			require.NoError(t, err)

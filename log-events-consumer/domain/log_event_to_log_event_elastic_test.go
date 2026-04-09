@@ -977,3 +977,170 @@ func TestLogEvent_ToLogEventElastic_AssetManagingContractChange_Error(t *testing
 		})
 	}
 }
+
+func TestLogEvent_ToLogEventElastic_OracleQueryStatusChange_Error(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   map[string]any
+		errMsg string
+	}{
+		{
+			name: "Missing querying entity",
+			body: map[string]any{
+				"queryId":        1234321.0,
+				"interfaceIndex": 3.0,
+				"type":           2.0,
+				"status":         "pending",
+			},
+			errMsg: "missing or invalid querying entity",
+		},
+		{
+			name: "Missing query id",
+			body: map[string]any{
+				"queryingEntity": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
+				"interfaceIndex": 3.0,
+				"type":           2.0,
+				"status":         "pending",
+			},
+			errMsg: "missing or invalid query id",
+		},
+		{
+			name: "Missing interface index",
+			body: map[string]any{
+				"queryingEntity": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
+				"queryId":        1234321.0,
+				"type":           2.0,
+				"status":         "pending",
+			},
+			errMsg: "missing or invalid interface index",
+		},
+		{
+			name: "Missing query type",
+			body: map[string]any{
+				"queryingEntity": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
+				"queryId":        1234321.0,
+				"interfaceIndex": 3.0,
+				"status":         "pending",
+			},
+			errMsg: "missing or invalid query type",
+		},
+		{
+			name: "Missing status",
+			body: map[string]any{
+				"queryingEntity": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
+				"queryId":        1234321.0,
+				"interfaceIndex": 3.0,
+				"type":           2.0,
+			},
+			errMsg: "missing or invalid query status",
+		},
+		{
+			name: "Invalid status value",
+			body: map[string]any{
+				"queryingEntity": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
+				"queryId":        1234321.0,
+				"interfaceIndex": 3.0,
+				"type":           2.0,
+				"status":         "PENDING",
+			},
+			errMsg: "invalid query status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			le := LogEvent{
+				Epoch:           199,
+				TickNumber:      43507670,
+				Timestamp:       1770230484,
+				TransactionHash: validTxHash,
+				LogId:           282618,
+				LogDigest:       "ab042c99d9461881",
+				Type:            14,
+				Body:            tt.body,
+			}
+
+			_, err := le.ToLogEventElastic()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
+func TestLogEvent_ToLogEventElastic_OracleSubscriberLogMessage_Error(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   map[string]any
+		errMsg string
+	}{
+		{
+			name: "Missing subscription id",
+			body: map[string]any{
+				"interfaceIndex":        5.0,
+				"contractIndex":         3.0,
+				"periodInMilliseconds":  60000.0,
+				"firstQueryDateAndTime": "2025-04-09 14:30:45.123'456",
+			},
+			errMsg: "missing or invalid subscription id",
+		},
+		{
+			name: "Missing interface index",
+			body: map[string]any{
+				"subscriptionId":        321234.0,
+				"contractIndex":         3.0,
+				"periodInMilliseconds":  60000.0,
+				"firstQueryDateAndTime": "2025-04-09 14:30:45.123'456",
+			},
+			errMsg: "missing or invalid interface index",
+		},
+		{
+			name: "Missing contract index",
+			body: map[string]any{
+				"subscriptionId":        321234.0,
+				"interfaceIndex":        5.0,
+				"periodInMilliseconds":  60000.0,
+				"firstQueryDateAndTime": "2025-04-09 14:30:45.123'456",
+			},
+			errMsg: "missing or invalid contract index",
+		},
+		{
+			name: "Missing period in milliseconds",
+			body: map[string]any{
+				"subscriptionId":        321234.0,
+				"interfaceIndex":        5.0,
+				"contractIndex":         3.0,
+				"firstQueryDateAndTime": "2025-04-09 14:30:45.123'456",
+			},
+			errMsg: "missing or invalid period in milliseconds",
+		},
+		{
+			name: "Missing first query date and time",
+			body: map[string]any{
+				"subscriptionId":       321234.0,
+				"interfaceIndex":       5.0,
+				"contractIndex":        3.0,
+				"periodInMilliseconds": 60000.0,
+			},
+			errMsg: "missing or invalid first query date and time",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			le := LogEvent{
+				Epoch:           199,
+				TickNumber:      43507670,
+				Timestamp:       1770230484,
+				TransactionHash: validTxHash,
+				LogId:           282618,
+				LogDigest:       "ab042c99d9461881",
+				Type:            15,
+				Body:            tt.body,
+			}
+
+			_, err := le.ToLogEventElastic()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}

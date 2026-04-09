@@ -164,6 +164,62 @@ func TestToInt64(t *testing.T) {
 	}
 }
 
+func TestToUint32(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       float64
+		expected    uint32
+		expectError bool
+	}{
+		{"Valid uint32", 12345.0, 12345, false},
+		{"Zero", 0.0, 0, false},
+		{"Max uint32", 4294967295.0, 4294967295, false},
+		{"Negative value", -1.0, 0, true},
+		{"Decimal value", 123.45, 0, true},
+		{"Overflow", 4294967296.0, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := toUint32(tt.input)
+			if (err != nil) != tt.expectError {
+				t.Errorf("toUint32(%f) error = %v, expectError %v", tt.input, err, tt.expectError)
+				return
+			}
+			if !tt.expectError && *got != tt.expected {
+				t.Errorf("toUint32(%f) = %v, want %v", tt.input, *got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestToInt16(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       float64
+		expected    int16
+		expectError bool
+	}{
+		{"Valid int16", 123.0, 123, false},
+		{"Zero", 0.0, 0, false},
+		{"Max int16", 32767.0, 32767, false},
+		{"Negative value", -1.0, 0, true},
+		{"Decimal value", 12.5, 0, true},
+		{"Overflow", 32768.0, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := toInt16(tt.input)
+			if (err != nil) != tt.expectError {
+				t.Errorf("toInt16(%f) error = %v, expectError %v", tt.input, err, tt.expectError)
+				return
+			}
+			if !tt.expectError && *got != tt.expected {
+				t.Errorf("toInt16(%f) = %v, want %v", tt.input, *got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestToByte(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -248,6 +304,112 @@ func TestLogEvent_IsSupported(t *testing.T) {
 			le := &LogEvent{Type: tt.eventType}
 			if got := le.IsSupported(supportedMap); got != tt.want {
 				t.Errorf("IsSupported() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetOracleQueryStatusValue(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int16
+	}{
+		{"pending", 1},
+		{"committed", 2},
+		{"success", 3},
+		{"timeout", 4},
+		{"unresolvable", 5},
+		{"unknown", 0},
+		{"", 0},
+		{"PENDING", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := getOracleQueryStatusValue(tt.input)
+			if got != tt.expected {
+				t.Errorf("getOracleQueryStatusValue(%q) = %d, want %d", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStringToDateAndTime(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected uint64
+		wantErr  bool
+	}{
+		{
+			name:     "valid timestamp",
+			input:    "2025-04-09 14:30:45.123'456",
+			expected: 1744209045123,
+			wantErr:  false,
+		},
+		{
+			name:     "epoch zero",
+			input:    "1970-01-01 00:00:00.000'000",
+			expected: 0,
+			wantErr:  false,
+		},
+		{
+			name:     "midnight no sub-seconds",
+			input:    "2025-01-01 00:00:00.000'000",
+			expected: 1735689600000,
+			wantErr:  false,
+		},
+		{
+			name:    "invalid format",
+			input:   "not-a-date",
+			wantErr: true,
+		},
+		{
+			name:    "empty string",
+			input:   "",
+			wantErr: true,
+		},
+		{
+			name:    "missing microseconds",
+			input:   "2025-04-09 14:30:45.123",
+			wantErr: true,
+		},
+		{
+			name:    "wrong separator",
+			input:   "2025-04-09 14:30:45.123.456",
+			wantErr: true,
+		},
+		{
+			name:    "missing time",
+			input:   "2025-04-09",
+			wantErr: true,
+		},
+		{
+			name:    "missing date",
+			input:   "14:30:45.123'456",
+			wantErr: true,
+		},
+		{
+			name:    "letters in fields",
+			input:   "abcd-ef-gh ij:kl:mn.opq'rst",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := stringToDateAndTime(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.expected {
+				t.Errorf("stringToDateAndTime(%q) = %d, want %d", tt.input, got, tt.expected)
 			}
 		})
 	}

@@ -1,0 +1,14 @@
+{
+  "epoch": 199,
+  "tickNumber": 43507670,
+  "timestamp": 1770230484000,
+  "transactionHash": "dkzxuegxfbbeeanspaourlzbmtdbhakfarbybmkiygegoavqugvfjxqfdspn",
+  "logId": 282618,
+  "logDigest": "ab042c99d9461881",
+  "logType": 14,
+  "queryingEntity": "SXUOGHMYUJRRSFODOKYTEVMHNIADMVALKXVNRZPALBYLGVTTCUMZAOSDEWUA",
+  "queryId": 1234321,
+  "interfaceIndex": 3,
+  "queryType": 2,
+  "queryStatus": 5
+}
