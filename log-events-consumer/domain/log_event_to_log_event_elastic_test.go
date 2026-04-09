@@ -52,6 +52,12 @@ func TestLogEvent_ToLogEventElastic_SpecialSystemTransactions(t *testing.T) {
 			expectedCategory:    6,
 			expectedTxHashEmpty: true,
 		},
+		{
+			name:                "SC_NOTIFICATION_TX with buggy bob tick suffix",
+			transactionHash:     "SC_NOTIFICATION_TX44444", // this is a bob bug
+			expectedCategory:    6,
+			expectedTxHashEmpty: true,
+		},
 	}
 
 	for _, tt := range tests {
