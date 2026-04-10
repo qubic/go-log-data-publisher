@@ -348,6 +348,12 @@ func TestStringToDateAndTime(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:     "real world example",
+			input:    "2026-04-09 18:33:30.001'000",
+			expected: 1775759610001,
+			wantErr:  false,
+		},
+		{
 			name:     "epoch zero",
 			input:    "1970-01-01 00:00:00.000'000",
 			expected: 0,
