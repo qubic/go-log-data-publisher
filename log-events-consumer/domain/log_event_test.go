@@ -145,7 +145,7 @@ func TestToInt64(t *testing.T) {
 	}{
 		{"Valid int64", 12345.0, 12345, false},
 		{"Zero", 0.0, 0, false},
-		{"Negative value", -1.0, 0, true}, // based on implementation: if num < 0 { return 0, err }
+		{"Negative value", -1.0, -1, false},
 		{"Decimal value", 123.45, 0, true},
 		{"Large int64", 9007199254740991.0, 9007199254740991, false},
 	}
@@ -192,7 +192,7 @@ func TestToUint32(t *testing.T) {
 	}
 }
 
-func TestToInt16(t *testing.T) {
+func TestToPositiveInt16(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       float64
@@ -208,7 +208,7 @@ func TestToInt16(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := toInt16(tt.input)
+			got, err := toPositiveInt16(tt.input)
 			if (err != nil) != tt.expectError {
 				t.Errorf("toInt16(%f) error = %v, expectError %v", tt.input, err, tt.expectError)
 				return

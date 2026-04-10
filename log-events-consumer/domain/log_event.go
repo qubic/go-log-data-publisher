@@ -531,7 +531,7 @@ func handleOracleQueryStatusChange(lee *LogEventElastic, body map[string]any) er
 	if !ok {
 		return fmt.Errorf("missing or invalid query type")
 	}
-	lee.QueryType, err = toInt16(qt)
+	lee.QueryType, err = toPositiveInt16(qt)
 	if err != nil {
 		return fmt.Errorf("converting query type: %w", err)
 	}
@@ -692,7 +692,7 @@ func toUint64(num float64) (*uint64, error) {
 
 func toInt64(num float64) (*int64, error) {
 	converted := int64(num)
-	if num < 0 || num != float64(converted) {
+	if num != float64(converted) {
 		return nil, fmt.Errorf("cannot convert to int64: %f", num)
 	}
 	return &converted, nil
@@ -706,7 +706,7 @@ func toUint32(num float64) (*uint32, error) {
 	return &converted, nil
 }
 
-func toInt16(num float64) (*int16, error) {
+func toPositiveInt16(num float64) (*int16, error) {
 	converted := int16(num)
 	if num < 0 || num != float64(converted) {
 		return nil, fmt.Errorf("cannot convert to int16: %f", num)
