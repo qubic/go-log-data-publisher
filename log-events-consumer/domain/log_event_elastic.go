@@ -53,10 +53,10 @@ type LogEventElastic struct {
 	CustomMessage            *uint64 `json:"customMessage,omitempty"`
 	RawPayload               []byte  `json:"rawPayload,omitempty"`
 	QueryingEntity           string  `json:"queryingEntity,omitempty"`
-	QueryID                  *uint64 `json:"queryId,omitempty"`
+	QueryId                  *uint64 `json:"queryId,omitempty"`
 	QueryType                *int16  `json:"queryType,omitempty"`
 	QueryStatus              *int16  `json:"queryStatus,omitempty"`
-	SubscriptionID           *uint32 `json:"subscriptionId,omitempty"`
+	SubscriptionId           *uint32 `json:"subscriptionId,omitempty"`
 	InterfaceIndex           *uint64 `json:"interfaceIndex,omitempty"`
 	PeriodMillis             *uint64 `json:"periodMillis,omitempty"`
 	FirstQueryTimestamp      *uint64 `json:"firstQueryTimestamp,omitempty"`

@@ -513,7 +513,7 @@ func handleOracleQueryStatusChange(lee *LogEventElastic, body map[string]any) er
 	if !ok {
 		return fmt.Errorf("missing or invalid query id")
 	}
-	lee.QueryID, err = toUint64(qi)
+	lee.QueryId, err = toUint64(qi)
 	if err != nil {
 		return fmt.Errorf("converting query id: %w", err)
 	}
@@ -540,9 +540,9 @@ func handleOracleQueryStatusChange(lee *LogEventElastic, body map[string]any) er
 	if !ok {
 		return fmt.Errorf("missing or invalid query status")
 	}
-	qsv := getOracleQueryStatusValue(qs)
-	if qsv == 0 {
-		return fmt.Errorf("invalid query status: %s(%d)", qs, qsv)
+	qsv, err := getOracleQueryStatusValue(qs)
+	if err != nil {
+		return fmt.Errorf("invalid query status: %w", err)
 	}
 	lee.QueryStatus = &qsv
 
@@ -556,7 +556,7 @@ func handleOracleSubscriberLogMessage(lee *LogEventElastic, body map[string]any)
 	if !ok {
 		return fmt.Errorf("missing or invalid subscription id")
 	}
-	lee.SubscriptionID, err = toUint32(sid)
+	lee.SubscriptionId, err = toUint32(sid)
 	if err != nil {
 		return fmt.Errorf("converting subscription id: %w", err)
 	}
@@ -617,20 +617,20 @@ func handleCustomMessage(lee *LogEventElastic, body map[string]any) error {
 	return nil
 }
 
-func getOracleQueryStatusValue(status string) int16 {
+func getOracleQueryStatusValue(status string) (int16, error) {
 	switch status {
 	case "pending":
-		return 1
+		return 1, nil
 	case "committed":
-		return 2
+		return 2, nil
 	case "success":
-		return 3
+		return 3, nil
 	case "timeout":
-		return 4
+		return 4, nil
 	case "unresolvable":
-		return 5
+		return 5, nil
 	default:
-		return 0
+		return 0, fmt.Errorf("unexpected oracle query status value: %s", status)
 	}
 }
 

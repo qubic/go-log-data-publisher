@@ -170,22 +170,29 @@ func TestLogEvent_IsSupported(t *testing.T) {
 
 func TestGetOracleQueryStatusValue(t *testing.T) {
 	tests := []struct {
-		input    string
-		expected int16
+		input       string
+		expected    int16
+		shouldError bool
 	}{
-		{"pending", 1},
-		{"committed", 2},
-		{"success", 3},
-		{"timeout", 4},
-		{"unresolvable", 5},
-		{"unknown", 0},
-		{"", 0},
-		{"PENDING", 0},
+		{"pending", 1, false},
+		{"committed", 2, false},
+		{"success", 3, false},
+		{"timeout", 4, false},
+		{"unresolvable", 5, false},
+		{"unknown", 0, true},
+		{"", 0, true},
+		{"PENDING", 0, true},
+		{"otherstatus", 0, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := getOracleQueryStatusValue(tt.input)
+			got, err := getOracleQueryStatusValue(tt.input)
+			if tt.shouldError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
 			if got != tt.expected {
 				t.Errorf("getOracleQueryStatusValue(%q) = %d, want %d", tt.input, got, tt.expected)
 			}
