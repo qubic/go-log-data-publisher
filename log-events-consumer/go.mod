@@ -1,6 +1,6 @@
 module github.com/qubic/log-events-consumer
 
-go 1.25.7
+go 1.26
 
 require (
 	github.com/Bose/minisentinel v0.0.0-20200130220412-917c5a9223bb

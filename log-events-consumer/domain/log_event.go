@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/qubic/go-node-connector/types"
 )
@@ -147,6 +148,18 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		err = handleReserveDeduction(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling reserve deduction: %w", err)
+		}
+
+	case 14:
+		err = handleOracleQueryStatusChange(&lee, le.Body)
+		if err != nil {
+			return LogEventElastic{}, fmt.Errorf("handling oracle query status change: %w", err)
+		}
+
+	case 15:
+		err = handleOracleSubscriberLogMessage(&lee, le.Body)
+		if err != nil {
+			return LogEventElastic{}, fmt.Errorf("handling oracle subscriber log message: %w", err)
 		}
 
 	case 255:
@@ -347,12 +360,18 @@ func handleAssetManagementTransfer(lee *LogEventElastic, body map[string]any, is
 		return fmt.Errorf("missing or invalid source contract index")
 	}
 	lee.SourceContractIndex, err = toUint64(sourceContractIndex)
+	if err != nil {
+		return fmt.Errorf("converting source contract index: %w", err)
+	}
 
 	destinationContractIndex, ok := body["destinationContractIndex"].(float64)
 	if !ok {
 		return fmt.Errorf("missing or invalid destination contract index")
 	}
 	lee.DestinationContractIndex, err = toUint64(destinationContractIndex)
+	if err != nil {
+		return fmt.Errorf("converting destination contract index: %w", err)
+	}
 
 	owner, ok := body["owner"].(string)
 	if !ok {
@@ -485,6 +504,107 @@ func handleReserveDeduction(lee *LogEventElastic, body map[string]any) error {
 	return nil
 }
 
+func handleOracleQueryStatusChange(lee *LogEventElastic, body map[string]any) error {
+	var err error
+
+	qe, ok := body["queryingEntity"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid querying entity")
+	}
+	lee.QueryingEntity = qe
+
+	qi, ok := body["queryId"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid query id")
+	}
+	lee.QueryId, err = toUint64(qi)
+	if err != nil {
+		return fmt.Errorf("converting query id: %w", err)
+	}
+
+	ii, ok := body["interfaceIndex"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid interface index")
+	}
+	lee.InterfaceIndex, err = toUint64(ii)
+	if err != nil {
+		return fmt.Errorf("converting interface index: %w", err)
+	}
+
+	qt, ok := body["type"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid query type")
+	}
+	lee.QueryType, err = toPositiveInt16(qt)
+	if err != nil {
+		return fmt.Errorf("converting query type: %w", err)
+	}
+
+	qs, ok := body["status"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid query status")
+	}
+	qsv, err := getOracleQueryStatusValue(qs)
+	if err != nil {
+		return fmt.Errorf("invalid query status: %w", err)
+	}
+	lee.QueryStatus = &qsv
+
+	return nil
+}
+
+func handleOracleSubscriberLogMessage(lee *LogEventElastic, body map[string]any) error {
+	var err error
+
+	sid, ok := body["subscriptionId"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid subscription id")
+	}
+	lee.SubscriptionId, err = toUint32(sid)
+	if err != nil {
+		return fmt.Errorf("converting subscription id: %w", err)
+	}
+
+	ii, ok := body["interfaceIndex"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid interface index")
+	}
+	lee.InterfaceIndex, err = toUint64(ii)
+	if err != nil {
+		return fmt.Errorf("converting interface index: %w", err)
+	}
+
+	ci, ok := body["contractIndex"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid contract index")
+	}
+	lee.ContractIndex, err = toUint64(ci)
+	if err != nil {
+		return fmt.Errorf("converting contract index: %w", err)
+	}
+
+	pim, ok := body["periodInMilliseconds"].(float64)
+	if !ok {
+		return fmt.Errorf("missing or invalid period in milliseconds")
+	}
+	lee.PeriodMillis, err = toUint64(pim)
+	if err != nil {
+		return fmt.Errorf("converting period in milliseconds: %w", err)
+	}
+
+	fqdt, ok := body["firstQueryDateAndTime"].(string)
+	if !ok {
+		return fmt.Errorf("missing or invalid first query date and time")
+	}
+	fqdtv, err := stringToDateAndTime(fqdt)
+	if err != nil {
+		return fmt.Errorf("converting first query date and time: %w", err)
+	}
+	lee.FirstQueryTimestamp = &fqdtv
+
+	return nil
+}
+
 func handleCustomMessage(lee *LogEventElastic, body map[string]any) error {
 	var err error
 
@@ -499,6 +619,38 @@ func handleCustomMessage(lee *LogEventElastic, body map[string]any) error {
 	}
 
 	return nil
+}
+
+func getOracleQueryStatusValue(status string) (int16, error) {
+	switch status {
+	case "pending":
+		return 1, nil
+	case "committed":
+		return 2, nil
+	case "success":
+		return 3, nil
+	case "timeout":
+		return 4, nil
+	case "unresolvable":
+		return 5, nil
+	default:
+		return 0, fmt.Errorf("unexpected oracle query status value: %s", status)
+	}
+}
+
+func stringToDateAndTime(s string) (uint64, error) {
+	var year, month, day, hour, minute, second, millisecond, microsecond int
+	_, err := fmt.Sscanf(s, "%d-%02d-%02d %02d:%02d:%02d.%03d'%03d",
+		&year, &month, &day, &hour, &minute, &second, &millisecond, &microsecond)
+	if err != nil {
+		return 0, fmt.Errorf("parsing date and time format: %w", err)
+	}
+
+	t := time.Date(year, time.Month(month), day, hour, minute, second,
+		(millisecond*1_000+microsecond)*1_000, // nanoseconds
+		time.UTC)
+
+	return uint64(t.UnixMilli()), nil
 }
 
 func toUnitOfMeasurement(unitOfMeasurement string) ([]byte, error) {
@@ -544,8 +696,24 @@ func toUint64(num float64) (*uint64, error) {
 
 func toInt64(num float64) (*int64, error) {
 	converted := int64(num)
-	if num < 0 || num != float64(converted) {
+	if num != float64(converted) {
 		return nil, fmt.Errorf("cannot convert to int64: %f", num)
+	}
+	return &converted, nil
+}
+
+func toUint32(num float64) (*uint32, error) {
+	converted := uint32(num)
+	if num < 0 || num != float64(converted) {
+		return nil, fmt.Errorf("cannot convert to uint32: %f", num)
+	}
+	return &converted, nil
+}
+
+func toPositiveInt16(num float64) (*int16, error) {
+	converted := int16(num)
+	if num < 0 || num != float64(converted) {
+		return nil, fmt.Errorf("cannot convert to int16: %f", num)
 	}
 	return &converted, nil
 }

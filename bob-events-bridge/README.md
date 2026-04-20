@@ -82,15 +82,23 @@ Configuration is loaded from environment variables with the `BOB_EVENTS_` prefix
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `BOB_EVENTS_BOB_WEBSOCKETURL` | `ws://localhost:40420/ws/logs` | Bob node WebSocket endpoint |
+| `BOB_EVENTS_BOB_WEBSOCKETURL` | `ws://localhost:40420/ws/qubic` | Bob node WebSocket endpoint |
 | `BOB_EVENTS_BOB_STATUSURL` | `http://localhost:40420/status` | Bob node status endpoint |
-| `BOB_EVENTS_BOB_LOGTYPES` | `0 1 2 3` | Space-separated log types to subscribe |
+| `BOB_EVENTS_BOB_OVERRIDESTARTTICK` | `false` | Override persisted state and start from StartTick |
+| `BOB_EVENTS_BOB_STARTTICK` | `0` | Tick to start syncing from (requires OverrideStartTick) |
 | `BOB_EVENTS_STORAGE_BASEPATH` | `data/bob-events-bridge` | Base path for database storage |
 | `BOB_EVENTS_SERVER_GRPCADDR` | `0.0.0.0:8001` | gRPC server listen address |
 | `BOB_EVENTS_SERVER_HTTPADDR` | `0.0.0.0:8000` | HTTP/REST server listen address |
+| `BOB_EVENTS_KAFKA_ENABLED` | `false` | Enable Kafka publishing |
+| `BOB_EVENTS_KAFKA_BROKERS` | `localhost:9092` | Comma-separated Kafka broker addresses |
+| `BOB_EVENTS_KAFKA_TOPIC` | `qubic-events` | Kafka topic name |
+| `BOB_EVENTS_METRICS_PORT` | `9999` | Prometheus metrics server port |
+| `BOB_EVENTS_METRICS_NAMESPACE` | `qubic_events_bridge` | Prometheus metrics namespace |
 | `BOB_EVENTS_DEBUG` | `false` | Enable debug logging |
 
 ### Log Types
+
+The service subscribes to all log types via tickStream. Supported types:
 
 | Type | Description |
 |------|-------------|
@@ -98,6 +106,19 @@ Configuration is loaded from environment variables with the `BOB_EVENTS_` prefix
 | 1 | asset_issuance |
 | 2 | asset_ownership_change |
 | 3 | asset_possession_change |
+| 4 | contract_error_message |
+| 5 | contract_warning_message |
+| 6 | contract_information_message |
+| 7 | contract_debug_message |
+| 8 | burning |
+| 9 | dust_burning |
+| 10 | spectrum_stats |
+| 11 | asset_ownership_managing_contract_change |
+| 12 | asset_possession_managing_contract_change |
+| 13 | contract_reserve_deduction |
+| 14 | oracle_query_status_change |
+| 15 | oracle_subscriber_log_message |
+| 255 | custom_message |
 
 ## Running
 
@@ -278,6 +299,10 @@ The service implements automatic crash recovery:
 - **Read timeouts** trigger reconnection to recover from silent failures
 - **Graceful shutdown** with configurable timeout
 
+## Metrics
+
+Prometheus metrics are served on a separate port (default 9999) with a `/health` endpoint for liveness checks. Metrics track processor state, event counts by type, Kafka publishing, and storage operations.
+
 ## Kafka Message Format
 
 Every event published to Kafka follows this envelope structure:
@@ -421,6 +446,30 @@ Every event published to Kafka follows this envelope structure:
   "deductedAmount": 5000,
   "remainingAmount": 95000,
   "contractIndex": 3
+}
+```
+
+#### Type 14 — oracle_query_status_change
+
+```json
+{
+  "queryingEntity": "ENTITYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "queryId": 42,
+  "interfaceIndex": 1,
+  "type": 0,
+  "status": "active"
+}
+```
+
+#### Type 15 — oracle_subscriber_log_message
+
+```json
+{
+  "subscriptionId": 1,
+  "interfaceIndex": 2,
+  "contractIndex": 3,
+  "periodInMilliseconds": 60000,
+  "firstQueryDateAndTime": "2025-01-15T10:00:00Z"
 }
 ```
 

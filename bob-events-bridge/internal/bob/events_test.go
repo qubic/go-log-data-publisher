@@ -193,6 +193,49 @@ func TestParseEventBody_AssetPossessionManagingContractChange(t *testing.T) {
 	assert.Equal(t, "CFB", parsed.AssetName)
 }
 
+func TestParseEventBody_OracleQueryStatusChange(t *testing.T) {
+	body := json.RawMessage(`{
+		"queryingEntity": "QUERRYINGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"queryId": 12345321,
+		"interfaceIndex": 1,
+		"type": 2,
+		"status": "pending"
+	}`)
+
+	result, err := ParseEventBody(LogTypeOracleQueryStatusChange, body)
+	require.NoError(t, err)
+
+	parsed, ok := result.(*OracleQueryStatusChangeBody)
+	require.True(t, ok)
+	assert.Equal(t, "QUERRYINGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", parsed.QueryingEntity)
+	assert.Equal(t, int64(12345321), parsed.QueryID)
+	assert.Equal(t, uint32(1), parsed.InterfaceIndex)
+	assert.Equal(t, uint32(2), parsed.Type)
+	assert.Equal(t, "pending", parsed.Status)
+}
+
+func TestParseEventBody_OracleSubscriberLogMessage(t *testing.T) {
+	body := json.RawMessage(`{
+		"subscriptionId": 1234321,
+		"interfaceIndex": 2,
+		"contractIndex": 3,
+		"periodInMilliseconds": 300000,
+		"firstQueryDateAndTime": "2025-01-15T12:00:00"
+	}`)
+
+	result, err := ParseEventBody(LogTypeOracleSubscriberLogMessage, body)
+	require.NoError(t, err)
+
+	parsed, ok := result.(*OracleSubscriberLogMessageBody)
+	require.True(t, ok)
+	assert.Equal(t, int32(1234321), parsed.SubscriptionID)
+	assert.Equal(t, uint32(2), parsed.InterfaceIndex)
+	assert.Equal(t, uint32(3), parsed.ContractIndex)
+	assert.Equal(t, uint32(300000), parsed.PeriodInMilliseconds)
+	assert.Equal(t, "2025-01-15T12:00:00", parsed.FirstQueryDateAndTime)
+
+}
+
 func TestParseEventBody_HexBody(t *testing.T) {
 	body := json.RawMessage(`{
 		"hex": "deadbeef0123456789abcdef"

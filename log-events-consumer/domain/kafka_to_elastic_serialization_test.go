@@ -58,6 +58,14 @@ func TestLogEvent_Integration(t *testing.T) {
 			expected: "testdata/elastic/contract-reserve-deduction-with-transaction.json",
 		},
 		{
+			filename: "testdata/kafka/oracle-query-status-change.json",
+			expected: "testdata/elastic/oracle-query-status-change.json",
+		},
+		{
+			filename: "testdata/kafka/oracle-subscriber-log-message.json",
+			expected: "testdata/elastic/oracle-subscriber-log-message.json",
+		},
+		{
 			filename: "testdata/kafka/custom-message-start-dividends.json",
 			expected: "testdata/elastic/custom-message-start-dividends.json",
 		},

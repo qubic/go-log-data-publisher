@@ -106,6 +106,22 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 			"assetName":                b.AssetName,
 		}, nil
 
+	case *bob.OracleQueryStatusChangeBody:
+		return map[string]any{
+			"queryingEntity": b.QueryingEntity,
+			"queryId":        b.QueryID,
+			"interfaceIndex": b.InterfaceIndex,
+			"type":           b.Type,
+			"status":         b.Status,
+		}, nil
+	case *bob.OracleSubscriberLogMessageBody:
+		return map[string]any{
+			"subscriptionId":        b.SubscriptionID,
+			"interfaceIndex":        b.InterfaceIndex,
+			"contractIndex":         b.ContractIndex,
+			"periodInMilliseconds":  b.PeriodInMilliseconds,
+			"firstQueryDateAndTime": b.FirstQueryDateAndTime,
+		}, nil
 	case *bob.HexBody:
 		return map[string]any{
 			"hex": b.Hex,
