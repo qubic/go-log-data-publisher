@@ -22,6 +22,7 @@ type Config struct {
 	Server  ServerConfig
 	Kafka   KafkaConfig
 	Metrics MetricsConfig
+	Replay  ReplayConfig
 	Debug   bool `conf:"default:false,help:enable debug logging"`
 }
 
@@ -35,7 +36,8 @@ type BobConfig struct {
 
 // StorageConfig holds the storage configuration
 type StorageConfig struct {
-	BasePath string `conf:"default:data/bob-events-bridge,help:base path for data storage"`
+	BasePath   string `conf:"default:data/bob-events-bridge,help:base path for data storage"`
+	KeepEpochs uint16 `conf:"default:0,help:max number of recent epoch DBs to keep loaded (0 = unlimited; on retention, older DBs are unloaded but their directories are preserved on disk for external archival)"`
 }
 
 // ServerConfig holds the server configuration
@@ -55,6 +57,17 @@ type KafkaConfig struct {
 type MetricsConfig struct {
 	Port      int    `conf:"default:9999"`
 	Namespace string `conf:"default:qubic_events_bridge"`
+}
+
+// ReplayConfig holds the replay binary configuration.
+// Source DB path: <Storage.BasePath>/epochs/<Epoch>.
+// TickStart=0 means start of epoch; TickEnd=0 means end of epoch.
+type ReplayConfig struct {
+	EnableServer  bool   `conf:"default:false,help:serve gRPC/HTTP API from the loaded epoch DBs"`
+	EnablePublish bool   `conf:"default:false,help:publish events from a single epoch to Kafka and exit (requires Kafka.Enabled=true)"`
+	Epoch         uint16 `conf:"default:0,help:epoch to replay (required when EnablePublish=true)"`
+	TickStart     uint32 `conf:"default:0,help:first tick to publish (0 = start of epoch)"`
+	TickEnd       uint32 `conf:"default:0,help:last tick to publish (0 = end of epoch)"`
 }
 
 // Parse loads configuration from environment variables and CLI flags

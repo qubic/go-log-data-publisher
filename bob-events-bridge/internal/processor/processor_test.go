@@ -48,7 +48,7 @@ func newTestProcessor(t *testing.T, publisher kafka.Publisher) *Processor {
 	t.Helper()
 	tempDir := t.TempDir()
 	logger := zap.NewNop()
-	mgr, err := storage.NewManager(tempDir, logger)
+	mgr, err := storage.NewManager(tempDir, 0, logger)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = mgr.Close() })
 

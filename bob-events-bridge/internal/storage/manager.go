@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,17 +13,32 @@ import (
 	"go.uber.org/zap"
 )
 
+// ErrEpochOutOfScope is returned when a write is attempted for an epoch that
+// has been unloaded by retention (either skipped at startup discovery or
+// evicted during a runtime epoch transition). Out-of-scope is permanent for
+// the lifetime of the process; callers should treat this as a fatal condition
+// since it indicates either operator error (restored archive in live data dir,
+// misconfigured KeepEpochs) or unexpected ingest order.
+var ErrEpochOutOfScope = errors.New("storage: epoch is out of scope (below retention threshold)")
+
 // Manager manages multiple epoch databases
 type Manager struct {
-	basePath string
-	logger   *zap.Logger
-	state    *StateStore
-	epochDBs map[uint32]*EpochDB
-	mu       sync.RWMutex
+	basePath   string
+	keepEpochs uint16
+	logger     *zap.Logger
+	state      *StateStore
+	epochDBs   map[uint32]*EpochDB
+	// highestEvictedEpoch is the largest epoch number that has been unloaded
+	// by retention. Writes to epoch <= this value are rejected with
+	// ErrEpochOutOfScope. Process-lifetime only; rebuilt at startup from
+	// directories we found on disk but did not load.
+	highestEvictedEpoch uint32
+	mu                  sync.RWMutex
 }
 
-// NewManager creates a new storage manager
-func NewManager(basePath string, logger *zap.Logger) (*Manager, error) {
+// NewManager creates a new storage manager. keepEpochs caps the number of
+// recent epoch DBs kept loaded; 0 means unlimited (no eviction).
+func NewManager(basePath string, keepEpochs uint16, logger *zap.Logger) (*Manager, error) {
 	// Ensure base path exists
 	if err := os.MkdirAll(basePath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create base path: %w", err)
@@ -35,10 +51,11 @@ func NewManager(basePath string, logger *zap.Logger) (*Manager, error) {
 	}
 
 	m := &Manager{
-		basePath: basePath,
-		logger:   logger,
-		state:    state,
-		epochDBs: make(map[uint32]*EpochDB),
+		basePath:   basePath,
+		keepEpochs: keepEpochs,
+		logger:     logger,
+		state:      state,
+		epochDBs:   make(map[uint32]*EpochDB),
 	}
 
 	// Discover and open existing epoch databases
@@ -50,7 +67,11 @@ func NewManager(basePath string, logger *zap.Logger) (*Manager, error) {
 	return m, nil
 }
 
-// discoverEpochDBs scans the epochs subfolder for existing epoch databases
+// discoverEpochDBs scans the epochs subfolder for existing epoch databases.
+// If keepEpochs > 0, only the top-N epoch directories (by number) are opened;
+// the rest are left on disk for external archival and the highestEvictedEpoch
+// threshold is set to the largest skipped epoch so future writes for those
+// epochs are rejected with ErrEpochOutOfScope.
 func (m *Manager) discoverEpochDBs() error {
 	epochsPath := filepath.Join(m.basePath, "epochs")
 
@@ -65,28 +86,50 @@ func (m *Manager) discoverEpochDBs() error {
 		return fmt.Errorf("failed to read epochs path: %w", err)
 	}
 
+	// Collect all valid epoch numbers from disk.
+	found := make([]uint32, 0, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-
-		name := entry.Name()
-		epoch, err := strconv.ParseUint(name, 10, 32)
+		epoch, err := strconv.ParseUint(entry.Name(), 10, 32)
 		if err != nil {
-			m.logger.Warn("Invalid epoch directory name", zap.String("name", name))
+			m.logger.Warn("Invalid epoch directory name", zap.String("name", entry.Name()))
 			continue
 		}
+		found = append(found, uint32(epoch))
+	}
 
-		db, err := NewEpochDB(m.basePath, uint32(epoch))
+	// Sort descending so we can take the top N.
+	sort.Slice(found, func(i, j int) bool { return found[i] > found[j] })
+
+	toOpen := found
+	var skipped []uint32
+	if m.keepEpochs > 0 && len(found) > int(m.keepEpochs) {
+		toOpen = found[:m.keepEpochs]
+		skipped = found[m.keepEpochs:]
+	}
+
+	for _, epoch := range toOpen {
+		db, err := NewEpochDB(m.basePath, epoch)
 		if err != nil {
 			m.logger.Error("Failed to open epoch db",
-				zap.Uint64("epoch", epoch),
+				zap.Uint32("epoch", epoch),
 				zap.Error(err))
 			continue
 		}
+		m.epochDBs[epoch] = db
+		m.logger.Info("Opened epoch database", zap.Uint32("epoch", epoch))
+	}
 
-		m.epochDBs[uint32(epoch)] = db
-		m.logger.Info("Opened epoch database", zap.Uint64("epoch", epoch))
+	// Set the out-of-scope threshold from the largest skipped epoch (if any).
+	// Skipped is sorted descending, so the first element is the max.
+	if len(skipped) > 0 {
+		m.highestEvictedEpoch = skipped[0]
+		for _, epoch := range skipped {
+			m.logger.Info("Epoch on disk but not loaded (retention)",
+				zap.Uint32("epoch", epoch))
+		}
 	}
 
 	return nil
@@ -121,13 +164,18 @@ func (m *Manager) LoadState() (*State, error) {
 	return m.state.LoadState()
 }
 
-// GetOrCreateEpochDB gets or creates an epoch database
+// GetOrCreateEpochDB gets or creates an epoch database.
+// Returns ErrEpochOutOfScope if the epoch has been unloaded by retention.
 func (m *Manager) GetOrCreateEpochDB(epoch uint32) (*EpochDB, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if db, exists := m.epochDBs[epoch]; exists {
 		return db, nil
+	}
+
+	if m.keepEpochs > 0 && epoch <= m.highestEvictedEpoch {
+		return nil, fmt.Errorf("%w: epoch=%d threshold=%d", ErrEpochOutOfScope, epoch, m.highestEvictedEpoch)
 	}
 
 	db, err := NewEpochDB(m.basePath, epoch)
@@ -138,7 +186,46 @@ func (m *Manager) GetOrCreateEpochDB(epoch uint32) (*EpochDB, error) {
 	m.epochDBs[epoch] = db
 	m.logger.Info("Created new epoch database", zap.Uint32("epoch", epoch))
 
+	m.evictOldestIfOverLimit()
+
 	return db, nil
+}
+
+// evictOldestIfOverLimit unloads the oldest epoch DBs until len(epochDBs) <= keepEpochs.
+// Eviction = Close() + delete from map. The on-disk directory is left intact for
+// external archival. Caller must hold m.mu.
+func (m *Manager) evictOldestIfOverLimit() {
+	if m.keepEpochs == 0 {
+		return
+	}
+
+	for len(m.epochDBs) > int(m.keepEpochs) {
+		// Find the smallest epoch number currently loaded.
+		var oldest uint32
+		first := true
+		for e := range m.epochDBs {
+			if first || e < oldest {
+				oldest = e
+				first = false
+			}
+		}
+
+		db := m.epochDBs[oldest]
+		if err := db.Close(); err != nil {
+			m.logger.Error("Failed to close evicted epoch db",
+				zap.Uint32("epoch", oldest),
+				zap.Error(err))
+		}
+		delete(m.epochDBs, oldest)
+
+		if oldest > m.highestEvictedEpoch {
+			m.highestEvictedEpoch = oldest
+		}
+
+		m.logger.Info("Epoch unloaded (retention)",
+			zap.Uint32("epoch", oldest),
+			zap.Uint32("threshold", m.highestEvictedEpoch))
+	}
 }
 
 // GetEpochDB gets an epoch database if it exists

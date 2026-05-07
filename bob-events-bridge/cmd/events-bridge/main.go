@@ -68,7 +68,7 @@ func main() {
 	bridgeMetrics := metrics.NewBridgeMetrics(promReg, cfg.Metrics.Namespace)
 
 	// Initialize storage manager
-	storageMgr, err := storage.NewManager(cfg.Storage.BasePath, logger)
+	storageMgr, err := storage.NewManager(cfg.Storage.BasePath, cfg.Storage.KeepEpochs, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize storage", zap.Error(err))
 	}
