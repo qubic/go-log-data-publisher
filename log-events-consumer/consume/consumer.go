@@ -44,22 +44,26 @@ type Consumer struct {
 	tickStore         TickStore
 	consumeMetrics    *metrics.Metrics
 	supportedLogTypes map[uint64][]int16
+	pollInterval      time.Duration
+	pollMaxRecords    int
 	highestTick       uint32
 	currentEpoch      uint32
 }
 
-func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, tickStore TickStore, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16) *Consumer {
+func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, tickStore TickStore, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16, pollInterval time.Duration, pollMaxRecords int) *Consumer {
 	return &Consumer{
 		kafkaClient:       kafkaClient,
 		elasticClient:     elasticClient,
 		tickStore:         tickStore,
 		consumeMetrics:    metrics,
 		supportedLogTypes: supportedEventLogTypes,
+		pollInterval:      pollInterval,
+		pollMaxRecords:    pollMaxRecords,
 	}
 }
 
 func (c *Consumer) Consume(ctx context.Context) error {
-	ticker := time.Tick(100 * time.Millisecond)
+	ticker := time.Tick(c.pollInterval)
 	for range ticker {
 
 		select {
@@ -83,7 +87,7 @@ func (c *Consumer) Consume(ctx context.Context) error {
 
 func (c *Consumer) consumeBatch(ctx context.Context) (int, int, error) {
 	defer c.kafkaClient.AllowRebalance()
-	fetches := c.kafkaClient.PollRecords(ctx, 1000)
+	fetches := c.kafkaClient.PollRecords(ctx, c.pollMaxRecords)
 	if errors := fetches.Errors(); len(errors) > 0 {
 		for _, err := range errors {
 			log.Printf("Fetches error: %v", err)

@@ -50,9 +50,13 @@ func run() error {
 			MaxRetries  int      `conf:"default:15"`
 		}
 		Broker struct {
-			BootstrapServers []string `conf:"default:localhost:9092"`
-			ConsumeTopic     string   `conf:"default:qubic-log-events-data"`
-			ConsumerGroup    string   `conf:"default:qubic-elastic"`
+			BootstrapServers       []string      `conf:"default:localhost:9092"`
+			ConsumeTopic           string        `conf:"default:qubic-log-events-data"`
+			ConsumerGroup          string        `conf:"default:qubic-elastic"`
+			PollInterval           time.Duration `conf:"default:100ms"`
+			PollMaxRecords         int           `conf:"default:4096"`
+			FetchMaxBytes          int           `conf:"default:52428800"` //franz-go: 50 MiB — per-broker fetch-response cap; peak consumer buffer ≈ brokers * this
+			FetchMaxPartitionBytes int           `conf:"default:1048576"`  //franz-go: 1 MiB — per-partition cap inside a fetch; usually the per-poll batch-size bottleneck
 		}
 		Redis struct {
 			SentinelHosts    []string      `conf:"default:localhost:26379"` // format: "host:port"
@@ -107,6 +111,8 @@ func run() error {
 		kgo.SeedBrokers(cfg.Broker.BootstrapServers...),
 		kgo.ConsumeTopics(cfg.Broker.ConsumeTopic),
 		kgo.ConsumerGroup(cfg.Broker.ConsumerGroup),
+		kgo.FetchMaxBytes(int32(cfg.Broker.FetchMaxBytes)),
+		kgo.FetchMaxPartitionBytes(int32(cfg.Broker.FetchMaxPartitionBytes)),
 		kgo.BlockRebalanceOnPoll(),
 		kgo.DisableAutoCommit(),
 		kgo.WithLogger(kgo.BasicLogger(os.Stdout, kgo.LogLevelInfo, nil)),
@@ -158,7 +164,7 @@ func run() error {
 	}
 
 	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
-	consumer := consume.NewConsumer(kafkaCl, elasticCl, tickStore, consumeMetrics, supportedTypes)
+	consumer := consume.NewConsumer(kafkaCl, elasticCl, tickStore, consumeMetrics, supportedTypes, cfg.Broker.PollInterval, cfg.Broker.PollMaxRecords)
 	procError := make(chan error, 1)
 
 	consumerCtx, consumerCtxCancel := context.WithCancel(context.Background())

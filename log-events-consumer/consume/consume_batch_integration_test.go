@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/qubic/log-events-consumer/elastic"
 	"github.com/qubic/log-events-consumer/metrics"
@@ -64,7 +65,7 @@ func TestConsumeBatch_Integration(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics(fmt.Sprintf("test_integration_%d", i))
-			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14, 15, 255}})
+			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14, 15, 255}}, 100*time.Millisecond, 1000)
 
 			records, docs, err := consumer.consumeBatch(context.Background())
 			require.NoError(t, err)
@@ -137,7 +138,7 @@ func TestConsumeBatch_Filtered_Integration(t *testing.T) {
 			}
 
 			m := metrics.NewMetrics(fmt.Sprintf("test_filtered_integration_%d", i))
-			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}})
+			consumer := NewConsumer(mockKafka, mockElastic, &tickstore.NoOpStore{}, m, map[uint64][]int16{0: {0, 1, 2, 3, 8, 13}}, 100*time.Millisecond, 1000)
 
 			records, docs, err := consumer.consumeBatch(context.Background())
 			require.NoError(t, err)
