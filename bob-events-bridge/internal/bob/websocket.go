@@ -91,7 +91,9 @@ func (c *WSClient) Subscribe(startTick uint32) (string, error) {
 	}
 
 	c.logger.Info("Sent tickStream subscription",
-		zap.Uint32("startTick", startTick))
+		zap.Uint32("startTick", startTick),
+		zap.Bool("excludeTxs", params.ExcludeTxs),
+		zap.Bool("skipEmptyTicks", params.SkipEmptyTicks))
 
 	// Read messages until we find the JSON-RPC response with our request ID.
 	// Bob may send tickStream notifications before the subscribe response

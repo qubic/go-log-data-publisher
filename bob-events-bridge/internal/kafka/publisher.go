@@ -112,9 +112,10 @@ func (p *Producer) PublishEvents(ctx context.Context, msgs []*EventMessage) erro
 		p.metrics.IncPublisherMessagesPublished(msg.Type, p.topic)
 	}
 
-	p.logger.Debug("Published batch to Kafka",
+	p.logger.Info("Published batch to Kafka",
 		zap.Int("count", len(msgs)),
-		zap.Uint32("tick", msgs[0].TickNumber))
+		zap.Uint32("tick", msgs[0].TickNumber),
+		zap.String("topic", p.topic))
 
 	return nil
 }
