@@ -20,7 +20,7 @@ type EpochDB struct {
 func NewEpochDB(basePath string, epoch uint32) (*EpochDB, error) {
 	path := fmt.Sprintf("%s/epochs/%d", basePath, epoch)
 
-	db, err := pebble.Open(path, &pebble.Options{})
+	db, err := pebble.Open(path, tunedPebbleOptions(epoch))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epoch db: %w", err)
 	}
