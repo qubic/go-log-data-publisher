@@ -50,15 +50,21 @@ type Consumer struct {
 	currentEpoch      uint32
 }
 
-func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, tickStore TickStore, metrics *metrics.Metrics, supportedEventLogTypes map[uint64][]int16, pollInterval time.Duration, pollMaxRecords int) *Consumer {
+type ConsumerOptions struct {
+	SupportedEventLogTypes map[uint64][]int16
+	PollInterval           time.Duration
+	PollMaxRecords         int
+}
+
+func NewConsumer(kafkaClient KafkaClient, elasticClient ElasticClient, tickStore TickStore, metrics *metrics.Metrics, consumerOptions ConsumerOptions) *Consumer {
 	return &Consumer{
 		kafkaClient:       kafkaClient,
 		elasticClient:     elasticClient,
 		tickStore:         tickStore,
 		consumeMetrics:    metrics,
-		supportedLogTypes: supportedEventLogTypes,
-		pollInterval:      pollInterval,
-		pollMaxRecords:    pollMaxRecords,
+		supportedLogTypes: consumerOptions.SupportedEventLogTypes,
+		pollInterval:      consumerOptions.PollInterval,
+		pollMaxRecords:    consumerOptions.PollMaxRecords,
 	}
 }
 
