@@ -34,6 +34,8 @@ func main() {
 
 	// Setup logger
 	logConfig := zap.NewProductionConfig()
+	logConfig.Encoding = "console"
+	logConfig.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.DateTime)
 	if cfg.Debug {
 		logConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	}
