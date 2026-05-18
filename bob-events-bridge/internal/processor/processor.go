@@ -88,6 +88,7 @@ func (p *Processor) Start(ctx context.Context) error {
 				p.tickEventIndex = count
 				p.tickForIndex = state.LastTick
 				p.logger.Info("Recovered tick event index",
+					zap.Uint32("epoch", p.currentEpoch),
 					zap.Uint32("tick", state.LastTick),
 					zap.Uint32("tickEventIndex", p.tickEventIndex))
 			}
@@ -134,7 +135,9 @@ func (p *Processor) Start(ctx context.Context) error {
 			}
 
 			p.logger.Error("Processing error, will reconnect",
-				zap.Error(err))
+				zap.Error(err),
+				zap.Uint32("lastTick", p.lastTick),
+				zap.Uint32("currentEpoch", p.currentEpoch))
 
 			select {
 			case <-ctx.Done():
@@ -162,6 +165,11 @@ func (p *Processor) Stop() {
 
 // connectAndProcess handles a single connection session
 func (p *Processor) connectAndProcess(ctx context.Context) error {
+
+	p.logger.Info("Connecting to bob",
+		zap.String("url", p.cfg.Bob.WebSocketURL),
+		zap.Uint32("lastTick", p.lastTick),
+		zap.Uint32("currentEpoch", p.currentEpoch))
 
 	// Create WebSocket client
 	p.client = bob.NewWSClient(p.cfg.Bob.WebSocketURL, p.logger)
@@ -257,7 +265,10 @@ func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 			if err := p.flushBatch(ctx); err != nil {
 				return fmt.Errorf("failed to flush batch on catch-up complete: %w", err)
 			}
-			p.logger.Info("Catch-up complete")
+			p.logger.Info("Catch-up complete",
+				zap.Uint32("epoch", p.currentEpoch),
+				zap.Uint32("lastTick", p.lastTick),
+				zap.Uint64("totalEventsProcessed", p.eventsReceived))
 			return nil
 		}
 
@@ -287,7 +298,9 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		}
 		p.logger.Info("Epoch transition detected",
 			zap.Uint32("oldEpoch", p.currentEpoch),
-			zap.Uint16("newEpoch", result.Epoch))
+			zap.Uint16("newEpoch", result.Epoch),
+			zap.Uint32("tick", result.Tick),
+			zap.Uint64("totalEventsProcessed", p.eventsReceived))
 		p.currentEpoch = uint32(result.Epoch)
 		p.metrics.SetCurrentEpoch(result.Epoch)
 	}
@@ -456,10 +469,12 @@ func (p *Processor) flushBatch(ctx context.Context) error {
 	p.metrics.SetLastProcessedLogID(batch.lastLogID)
 	p.metrics.SetCurrentTickEventCount(0)
 
-	p.logger.Debug("Flushed batch",
+	p.logger.Info("Flushed batch",
 		zap.Uint32("tick", batch.tick),
 		zap.Uint32("epoch", batch.epoch),
-		zap.Int("events", len(batch.protoEvents)))
+		zap.Int("events", len(batch.protoEvents)),
+		zap.Uint64("lastLogID", batch.lastLogID),
+		zap.Uint64("totalEventsProcessed", p.eventsReceived))
 
 	return nil
 }

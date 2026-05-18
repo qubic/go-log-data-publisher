@@ -20,7 +20,7 @@ type EpochDB struct {
 func NewEpochDB(basePath string, epoch uint32) (*EpochDB, error) {
 	path := fmt.Sprintf("%s/epochs/%d", basePath, epoch)
 
-	db, err := pebble.Open(path, &pebble.Options{})
+	db, err := pebble.Open(path, tunedPebbleOptions(epoch))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epoch db: %w", err)
 	}
@@ -134,6 +134,44 @@ func (e *EpochDB) CountEventsForTick(tick uint32) (uint32, error) {
 	}
 
 	return count, nil
+}
+
+// IterateEventsInRange invokes cb for every event in [tickStart, tickEnd] (inclusive),
+// in ascending key order. tickStart=0 means start of DB; tickEnd=0 means end of DB.
+// If cb returns an error, iteration stops and the error is returned.
+func (e *EpochDB) IterateEventsInRange(tickStart, tickEnd uint32, cb func(*eventsbridge.Event) error) error {
+	opts := &pebble.IterOptions{}
+	if tickStart > 0 {
+		opts.LowerBound = []byte(fmt.Sprintf("%010d:", tickStart))
+	}
+	if tickEnd > 0 {
+		// ';' is one greater than ':' in ASCII, so this excludes any keys past tickEnd.
+		opts.UpperBound = []byte(fmt.Sprintf("%010d;", tickEnd))
+	}
+
+	iter, err := e.db.NewIter(opts)
+	if err != nil {
+		return fmt.Errorf("failed to create iterator: %w", err)
+	}
+	defer iter.Close() //nolint:errcheck
+
+	for iter.First(); iter.Valid(); iter.Next() {
+		value, err := iter.ValueAndErr()
+		if err != nil {
+			return fmt.Errorf("failed to read value: %w", err)
+		}
+
+		event := &eventsbridge.Event{}
+		if err := proto.Unmarshal(value, event); err != nil {
+			return fmt.Errorf("failed to unmarshal event: %w", err)
+		}
+
+		if err := cb(event); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetEventsForTick retrieves all events for a given tick using prefix scan

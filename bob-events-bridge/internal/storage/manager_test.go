@@ -25,11 +25,21 @@ func createTestEvent(epoch, tick uint32, logID uint64) *eventsbridge.Event {
 	}
 }
 
-// createTestManager creates a manager with the given temp directory and no-op logger
+// createTestManager creates a manager with the given temp directory and no-op logger.
+// keepEpochs=0 means unlimited (no retention).
 func createTestManager(t *testing.T, basePath string) *Manager {
 	t.Helper()
 	logger := zap.NewNop()
-	manager, err := NewManager(basePath, logger)
+	manager, err := NewManager(basePath, 0, logger)
+	require.NoError(t, err, "Failed to create manager")
+	return manager
+}
+
+// createTestManagerWithKeep creates a manager with a specific keepEpochs cap.
+func createTestManagerWithKeep(t *testing.T, basePath string, keepEpochs uint16) *Manager {
+	t.Helper()
+	logger := zap.NewNop()
+	manager, err := NewManager(basePath, keepEpochs, logger)
 	require.NoError(t, err, "Failed to create manager")
 	return manager
 }

@@ -34,6 +34,8 @@ func main() {
 
 	// Setup logger
 	logConfig := zap.NewProductionConfig()
+	logConfig.Encoding = "console"
+	logConfig.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.DateTime)
 	if cfg.Debug {
 		logConfig.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	}
@@ -68,7 +70,7 @@ func main() {
 	bridgeMetrics := metrics.NewBridgeMetrics(promReg, cfg.Metrics.Namespace)
 
 	// Initialize storage manager
-	storageMgr, err := storage.NewManager(cfg.Storage.BasePath, logger)
+	storageMgr, err := storage.NewManager(cfg.Storage.BasePath, cfg.Storage.KeepEpochs, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize storage", zap.Error(err))
 	}

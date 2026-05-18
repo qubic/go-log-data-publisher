@@ -50,9 +50,11 @@ func run() error {
 			MaxRetries  int      `conf:"default:15"`
 		}
 		Broker struct {
-			BootstrapServers []string `conf:"default:localhost:9092"`
-			ConsumeTopic     string   `conf:"default:qubic-log-events-data"`
-			ConsumerGroup    string   `conf:"default:qubic-elastic"`
+			BootstrapServers []string      `conf:"default:localhost:9092"`
+			ConsumeTopic     string        `conf:"default:qubic-log-events-data"`
+			ConsumerGroup    string        `conf:"default:qubic-elastic"`
+			PollInterval     time.Duration `conf:"default:100ms"`
+			PollMaxRecords   int           `conf:"default:4096"`
 		}
 		Redis struct {
 			SentinelHosts    []string      `conf:"default:localhost:26379"` // format: "host:port"
@@ -158,7 +160,12 @@ func run() error {
 	}
 
 	consumeMetrics := metrics.NewMetrics(cfg.Metrics.Namespace)
-	consumer := consume.NewConsumer(kafkaCl, elasticCl, tickStore, consumeMetrics, supportedTypes)
+	consumerOptions := consume.ConsumerOptions{
+		SupportedEventLogTypes: supportedTypes,
+		PollInterval:           cfg.Broker.PollInterval,
+		PollMaxRecords:         cfg.Broker.PollMaxRecords,
+	}
+	consumer := consume.NewConsumer(kafkaCl, elasticCl, tickStore, consumeMetrics, consumerOptions)
 	procError := make(chan error, 1)
 
 	consumerCtx, consumerCtxCancel := context.WithCancel(context.Background())

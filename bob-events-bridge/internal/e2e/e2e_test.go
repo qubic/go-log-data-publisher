@@ -53,7 +53,7 @@ func TestE2E_SingleEventFlow(t *testing.T) {
 
 	// 2. Create storage
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err, "Failed to create storage manager")
 
 	// 3. Create processor
@@ -115,7 +115,7 @@ func TestE2E_MultipleEventsPerTick(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -186,7 +186,7 @@ func TestE2E_EpochTransition(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -260,7 +260,7 @@ func TestE2E_EventOverwrite(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -327,7 +327,7 @@ func TestE2E_StatePersistence(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -380,7 +380,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 		mockBob := NewMockBobServer(145, 22000000)
 		defer mockBob.Close()
 
-		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 		require.NoError(t, err)
 
 		cfg := CreateTestConfig(mockBob, tempDir)
@@ -417,7 +417,7 @@ func TestE2E_CrashRecovery(t *testing.T) {
 	mockBob2 := NewMockBobServer(145, 22000100)
 	defer mockBob2.Close()
 
-	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr2, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
@@ -449,7 +449,7 @@ func TestE2E_GetStatus(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -510,7 +510,7 @@ func TestE2E_EventBodyParsing(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -573,7 +573,7 @@ func TestE2E_QueryAssetOwnershipManagingContractChange(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -639,7 +639,7 @@ func TestE2E_QueryAssetPossessionManagingContractChange(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -707,7 +707,7 @@ func TestE2E_NonOKLogsSkipped(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -773,7 +773,7 @@ func TestE2E_MultipleLogTypes(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -834,7 +834,7 @@ func TestE2E_IndexInTickResetsAcrossTicks(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -934,7 +934,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 		mockBob := NewMockBobServer(145, 22000000)
 		defer mockBob.Close()
 
-		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 		require.NoError(t, err)
 
 		cfg := CreateTestConfig(mockBob, tempDir)
@@ -980,7 +980,7 @@ func TestE2E_CrashRecoveryIndexInTick(t *testing.T) {
 	mockBob2 := NewMockBobServer(145, 22000000)
 	defer mockBob2.Close()
 
-	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr2, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg2 := CreateTestConfig(mockBob2, tempDir)
@@ -1048,7 +1048,7 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	mockKafka := kafka.NewMockPublisher()
@@ -1125,7 +1125,7 @@ func runLogTypeE2ETest(t *testing.T, tc logTypeTestCase) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	mockKafka := kafka.NewMockPublisher()
@@ -1573,7 +1573,7 @@ func TestE2E_KafkaPublishFailure(t *testing.T) {
 	defer mockBob.Close()
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	mockKafka := kafka.NewMockPublisher()
@@ -1657,7 +1657,7 @@ func TestE2E_IndexResetAfterResend(t *testing.T) {
 		mockBob := NewMockBobServer(145, 22000000)
 		defer mockBob.Close()
 
-		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 		require.NoError(t, err)
 
 		mockKafka := kafka.NewMockPublisher()
@@ -1710,7 +1710,7 @@ func TestE2E_IndexResetAfterResend(t *testing.T) {
 	mockBob2 := NewMockBobServer(145, 22000000)
 	defer mockBob2.Close()
 
-	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr2, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	mockKafka2 := kafka.NewMockPublisher()
@@ -1840,7 +1840,7 @@ func TestE2E_NotificationsBeforeSubscribeResponse(t *testing.T) {
 	})
 
 	tempDir := t.TempDir()
-	storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	cfg := CreateTestConfig(mockBob, tempDir)
@@ -1891,7 +1891,7 @@ func TestE2E_KafkaResend(t *testing.T) {
 		mockBob := NewMockBobServer(145, 22000000)
 		defer mockBob.Close()
 
-		storageMgr, err := storage.NewManager(tempDir, zap.NewNop())
+		storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
 		require.NoError(t, err)
 
 		mockKafka := kafka.NewMockPublisher()
@@ -1935,7 +1935,7 @@ func TestE2E_KafkaResend(t *testing.T) {
 	mockBob2 := NewMockBobServer(145, 22000000)
 	defer mockBob2.Close()
 
-	storageMgr2, err := storage.NewManager(tempDir, zap.NewNop())
+	storageMgr2, err := storage.NewManager(tempDir, 0, zap.NewNop())
 	require.NoError(t, err)
 
 	mockKafka2 := kafka.NewMockPublisher()
