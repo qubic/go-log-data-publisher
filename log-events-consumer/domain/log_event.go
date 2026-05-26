@@ -11,6 +11,8 @@ import (
 	"github.com/qubic/go-node-connector/types"
 )
 
+const QuTransferType int16 = 0
+
 // Special system transactions
 // Qubic supports, per tick, 1024 regular user transactions and a couple special
 // 'transactions' (special not transaction-related event logs).
@@ -25,7 +27,7 @@ var sysTransactionMap = map[string]uint8{
 	"SC_NOTIFICATION_TX": 6,
 }
 
-const CategoryDividend uint8 = 7
+const CategoryInDividendSection uint8 = 7
 
 // LogEvent data received from kafka that is already validated for missing fields.
 // Some data types are a bit oversized but correspond with the elastic template.
@@ -99,7 +101,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	}
 
 	switch lee.LogType {
-	case 0:
+	case QuTransferType:
 		err = handleQuTransfer(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling qu transfer: %w", err)
@@ -188,7 +190,7 @@ func appendCategories(lee *LogEventElastic, le *LogEvent) error {
 
 	// mark, if log is in dividend section
 	if le.Dividend {
-		lee.Categories = append(lee.Categories, CategoryDividend)
+		lee.Categories = append(lee.Categories, CategoryInDividendSection)
 	}
 	return nil
 }

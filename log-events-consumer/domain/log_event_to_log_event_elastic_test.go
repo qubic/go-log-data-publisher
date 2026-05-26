@@ -1095,7 +1095,7 @@ func TestLogEvent_ToLogEventElastic_DividendCategory(t *testing.T) {
 
 		lee, err := le.ToLogEventElastic()
 		require.NoError(t, err)
-		assert.Contains(t, lee.Categories, CategoryDividend)
+		assert.Contains(t, lee.Categories, CategoryInDividendSection)
 	})
 
 	t.Run("Other category and Dividend=true adds CategoryDividend to categories", func(t *testing.T) {
@@ -1106,7 +1106,7 @@ func TestLogEvent_ToLogEventElastic_DividendCategory(t *testing.T) {
 		lee, err := le.ToLogEventElastic()
 		require.NoError(t, err)
 		assert.Len(t, lee.Categories, 2)
-		assert.Contains(t, lee.Categories, CategoryDividend)
+		assert.Contains(t, lee.Categories, CategoryInDividendSection)
 		assert.Contains(t, lee.Categories, uint8(4))
 	})
 
@@ -1116,7 +1116,7 @@ func TestLogEvent_ToLogEventElastic_DividendCategory(t *testing.T) {
 
 		lee, err := le.ToLogEventElastic()
 		require.NoError(t, err)
-		assert.NotContains(t, lee.Categories, CategoryDividend)
+		assert.NotContains(t, lee.Categories, CategoryInDividendSection)
 	})
 }
 
