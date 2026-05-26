@@ -3,7 +3,7 @@ name: Create bob events bridge dev image
 on:
   push:
     branches:
-      - 34-epoch-archive
+      - 'feature/mark-dividends'
     paths:
       - 'bob-events-bridge/**'
       - '.github/workflows/push-docker-bob-events-bridge-dev.yaml'
@@ -53,4 +53,4 @@ jobs:
           context: ./bob-events-bridge
           file: ./bob-events-bridge/Dockerfile
           push: true
-          tags: ghcr.io/qubic/bob-events-bridge:34-epoch-archive
+          tags: ghcr.io/qubic/bob-events-bridge:mark-dividends

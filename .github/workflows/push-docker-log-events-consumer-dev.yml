@@ -3,7 +3,7 @@ name: Create log events consumer dev image
 on:
   push:
     branches:
-      - '33-oracle-log-types'
+      - 'feature/mark-dividends'
     paths:
       - 'log-events-consumer/**'
       - '.github/workflows/push-docker-log-events-consumer-dev.yml'
@@ -53,4 +53,4 @@ jobs:
           context: ./log-events-consumer
           file: ./log-events-consumer/Dockerfile
           push: true
-          tags: ghcr.io/qubic/log-events-consumer:33-oracle-log-types
+          tags: ghcr.io/qubic/log-events-consumer:mark-dividends
