@@ -11,8 +11,6 @@ import (
 	"github.com/qubic/go-node-connector/types"
 )
 
-const QuTransferType int16 = 0
-
 // Special system transactions
 // Qubic supports, per tick, 1024 regular user transactions and a couple special
 // 'transactions' (special not transaction-related event logs).
@@ -101,7 +99,7 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	}
 
 	switch lee.LogType {
-	case QuTransferType:
+	case 0:
 		err = handleQuTransfer(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling qu transfer: %w", err)
@@ -188,8 +186,8 @@ func appendCategories(lee *LogEventElastic, le *LogEvent) error {
 		lee.Categories = append(lee.Categories, hashCategory)
 	}
 
-	// mark, if log is in dividend section and a qu transfer
-	if le.Dividend && le.Type == QuTransferType {
+	// mark, if log is in dividend section
+	if le.Dividend {
 		lee.Categories = append(lee.Categories, CategoryDividend)
 	}
 	return nil

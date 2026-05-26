@@ -1118,24 +1118,6 @@ func TestLogEvent_ToLogEventElastic_DividendCategory(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, lee.Categories, CategoryDividend)
 	})
-
-	t.Run("Dividend=true does not add CategoryDividend for non-QU-transfer type", func(t *testing.T) {
-		le := base
-		le.Type = 1
-		le.Dividend = true
-		le.Body = map[string]any{ // needed for type 1 deserialization
-			"assetIssuer":           "A",
-			"assetName":             "B",
-			"managingContractIndex": 1.0,
-			"numberOfDecimalPlaces": 2.0,
-			"numberOfShares":        3.0,
-			"unitOfMeasurement":     "1234567",
-		}
-
-		lee, err := le.ToLogEventElastic()
-		require.NoError(t, err)
-		assert.NotContains(t, lee.Categories, CategoryDividend)
-	})
 }
 
 func TestLogEvent_ToLogEventElastic_OracleSubscriberLogMessage_Error(t *testing.T) {
