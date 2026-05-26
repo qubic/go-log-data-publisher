@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -18,6 +19,8 @@ import (
 	"github.com/twmb/franz-go/pkg/kerr"
 	"go.uber.org/zap"
 )
+
+var logIDCounter atomic.Uint64
 
 // mockPublisher implements kafka.Publisher for testing
 type mockPublisher struct {
@@ -59,8 +62,33 @@ func newTestProcessor(t *testing.T, publisher kafka.Publisher) *Processor {
 	return NewProcessor(cfg, mgr, logger, publisher, m)
 }
 
-func makeQuTransferBody(from, to string, amount int64) json.RawMessage {
-	b, _ := json.Marshal(map[string]any{"from": from, "to": to, "amount": amount})
+func makeLogPayload(logType uint32, body json.RawMessage) bob.LogPayload {
+	id := logIDCounter.Add(1)
+	return bob.LogPayload{
+		OK:        true,
+		Epoch:     1,
+		Tick:      100,
+		Type:      logType,
+		LogID:     id,
+		LogDigest: fmt.Sprintf("d%d", id),
+		BodySize:  10,
+		Timestamp: 1000 + id,
+		TxHash:    fmt.Sprintf("tx%d", id),
+		Body:      body,
+	}
+}
+
+func makeQuTransferBody() json.RawMessage {
+	b, _ := json.Marshal(map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": int64(100),
+	})
+	return b
+}
+
+func makeCustomMessageBody(msg string) json.RawMessage {
+	b, _ := json.Marshal(map[string]any{"customMessage": msg})
 	return b
 }
 
@@ -73,12 +101,9 @@ func TestHandleTickStreamResult_LastLogForTick_MultipleEvents(t *testing.T) {
 		Epoch: 1,
 		Tick:  100,
 		Logs: []bob.LogPayload{
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 1, LogDigest: "d1", BodySize: 10, Timestamp: 1000, TxHash: "tx1",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", 100)},
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 2, LogDigest: "d2", BodySize: 10, Timestamp: 1001, TxHash: "tx2",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", 200)},
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 3, LogDigest: "d3", BodySize: 10, Timestamp: 1002, TxHash: "tx3",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", 300)},
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
 		},
 	}
 
@@ -108,8 +133,7 @@ func TestHandleTickStreamResult_LastLogForTick_SingleEvent(t *testing.T) {
 		Epoch: 1,
 		Tick:  100,
 		Logs: []bob.LogPayload{
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 1, LogDigest: "d1", BodySize: 10, Timestamp: 1000, TxHash: "tx1",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", 100)},
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
 		},
 	}
 
@@ -133,12 +157,10 @@ func TestHandleTickStreamResult_LastLogForTick_MixedOKAndNonOK(t *testing.T) {
 		Epoch: 1,
 		Tick:  100,
 		Logs: []bob.LogPayload{
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 1, LogDigest: "d1", BodySize: 10, Timestamp: 1000, TxHash: "tx1",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", 100)},
-			{OK: false, Epoch: 1, Tick: 100, Type: 0, LogID: 2}, // non-OK, skipped
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 3, LogDigest: "d3", BodySize: 10, Timestamp: 1002, TxHash: "tx3",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", 200)},
-			{OK: false, Epoch: 1, Tick: 100, Type: 0, LogID: 4}, // non-OK, skipped — last in tick but not added
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			{OK: false}, // non-OK, skipped
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			{OK: false}, // non-OK, skipped — last in tick but not added
 		},
 	}
 
@@ -165,10 +187,8 @@ func TestHandleTickStreamResult_LastLogForTick_NoPublisher(t *testing.T) {
 		Epoch: 1,
 		Tick:  100,
 		Logs: []bob.LogPayload{
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 1, LogDigest: "d1", BodySize: 10, Timestamp: 1000, TxHash: "tx1",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", 100)},
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 2, LogDigest: "d2", BodySize: 10, Timestamp: 1001, TxHash: "tx2",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", 200)},
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
 		},
 	}
 
@@ -183,6 +203,85 @@ func TestHandleTickStreamResult_LastLogForTick_NoPublisher(t *testing.T) {
 
 	// No kafka messages when publisher is nil
 	assert.Empty(t, p.pendingBatch.kafkaMsgs)
+}
+
+func TestHandleTickStreamResult_IsDividend(t *testing.T) {
+	pub := &mockPublisher{}
+	p := newTestProcessor(t, pub)
+	p.currentEpoch = 1
+
+	result := &bob.TickStreamResult{
+		Epoch: 1,
+		Tick:  100,
+		Logs: []bob.LogPayload{
+			// Before dividend section — not a dividend
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			// Start dividend marker — not a dividend itself
+			makeLogPayload(bob.LogTypeCustomMessage, makeCustomMessageBody(dividendsStart)),
+			// Inside dividend section — dividend
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			// End dividend marker — not a dividend itself
+			makeLogPayload(bob.LogTypeCustomMessage, makeCustomMessageBody(dividendsEnd)),
+			// After dividend section — not a dividend
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+		},
+	}
+
+	err := p.handleTickStreamResult(context.Background(), result)
+	require.NoError(t, err)
+	require.NotNil(t, p.pendingBatch)
+
+	msgs := p.pendingBatch.kafkaMsgs
+	require.Len(t, msgs, 6)
+
+	assert.False(t, msgs[0].Dividend, "event before dividend section should not be a dividend")
+	assert.False(t, msgs[1].Dividend, "dividendsStart marker should not be a dividend")
+	assert.True(t, msgs[2].Dividend, "event inside dividend section should be a dividend")
+	assert.True(t, msgs[3].Dividend, "event inside dividend section should be a dividend")
+	assert.False(t, msgs[4].Dividend, "dividendsEnd marker should not be a dividend")
+	assert.False(t, msgs[5].Dividend, "event after dividend section should not be a dividend")
+}
+
+func TestHandleTickStreamResult_IsDividend_TwoSections(t *testing.T) {
+	pub := &mockPublisher{}
+	p := newTestProcessor(t, pub)
+	p.currentEpoch = 1
+
+	result := &bob.TickStreamResult{
+		Epoch: 1,
+		Tick:  100,
+		Logs: []bob.LogPayload{
+			// Before first dividend section
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			// First dividend section
+			makeLogPayload(bob.LogTypeCustomMessage, makeCustomMessageBody(dividendsStart)),
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			makeLogPayload(bob.LogTypeCustomMessage, makeCustomMessageBody(dividendsEnd)),
+			// Second dividend section
+			makeLogPayload(bob.LogTypeCustomMessage, makeCustomMessageBody(dividendsStart)),
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+			makeLogPayload(bob.LogTypeCustomMessage, makeCustomMessageBody(dividendsEnd)),
+			// After second dividend section
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+		},
+	}
+
+	err := p.handleTickStreamResult(context.Background(), result)
+	require.NoError(t, err)
+	require.NotNil(t, p.pendingBatch)
+
+	msgs := p.pendingBatch.kafkaMsgs
+	require.Len(t, msgs, 8)
+
+	assert.False(t, msgs[0].Dividend, "event before first dividend section should not be a dividend")
+	assert.False(t, msgs[1].Dividend, "first dividendsStart marker should not be a dividend")
+	assert.True(t, msgs[2].Dividend, "event inside first dividend section should be a dividend")
+	assert.False(t, msgs[3].Dividend, "first dividendsEnd marker should not be a dividend")
+	assert.False(t, msgs[4].Dividend, "second dividendsStart marker should not be a dividend")
+	assert.True(t, msgs[5].Dividend, "event inside second dividend section should be a dividend")
+	assert.False(t, msgs[6].Dividend, "second dividendsEnd marker should not be a dividend")
+	assert.False(t, msgs[7].Dividend, "event after second dividend section should not be a dividend")
 }
 
 func TestIsNonRetriableKafkaError(t *testing.T) {
@@ -238,10 +337,7 @@ func TestFlushBatch_NonRetriableKafkaError(t *testing.T) {
 	result := &bob.TickStreamResult{
 		Epoch: 1,
 		Tick:  100,
-		Logs: []bob.LogPayload{
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 1, LogDigest: "d1", BodySize: 10, Timestamp: 1000, TxHash: "tx1",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", 100)},
-		},
+		Logs:  []bob.LogPayload{makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody())},
 	}
 
 	err := p.handleTickStreamResult(context.Background(), result)
@@ -268,10 +364,7 @@ func TestFlushBatch_RetriableKafkaError(t *testing.T) {
 	result := &bob.TickStreamResult{
 		Epoch: 1,
 		Tick:  100,
-		Logs: []bob.LogPayload{
-			{OK: true, Epoch: 1, Tick: 100, Type: 0, LogID: 1, LogDigest: "d1", BodySize: 10, Timestamp: 1000, TxHash: "tx1",
-				Body: makeQuTransferBody("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", 100)},
-		},
+		Logs:  []bob.LogPayload{makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody())},
 	}
 
 	err := p.handleTickStreamResult(context.Background(), result)

@@ -346,7 +346,7 @@ func TestBuildEventMessage(t *testing.T) {
 		Amount: 1000,
 	}
 
-	msg, err := BuildEventMessage(payload, body, 3, false)
+	msg, err := BuildEventMessage(body, 3, false, payload, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(3), msg.Index)
@@ -376,7 +376,7 @@ func TestBuildEventMessage_NilBody(t *testing.T) {
 		TxHash:    "TXHASH",
 	}
 
-	msg, err := BuildEventMessage(payload, nil, 0, false)
+	msg, err := BuildEventMessage(nil, 0, false, payload, false)
 	require.NoError(t, err)
 	assert.Nil(t, msg.Body)
 	assert.False(t, msg.LastLogForTick)
@@ -401,9 +401,37 @@ func TestBuildEventMessage_LastLogForTick(t *testing.T) {
 		Amount: 500,
 	}
 
-	msg, err := BuildEventMessage(payload, body, 5, true)
+	msg, err := BuildEventMessage(body, 5, true, payload, false)
 	require.NoError(t, err)
 	assert.True(t, msg.LastLogForTick)
+}
+
+func TestBuildEventMessage_IsDividend(t *testing.T) {
+	msg, err := BuildEventMessage(&bob.QuTransferBody{}, 5, false, &bob.LogPayload{}, true)
+	require.NoError(t, err)
+	assert.True(t, msg.Dividend)
+}
+
+func TestBuildEventMessage_IsNotDividend(t *testing.T) {
+	msg, err := BuildEventMessage(&bob.QuTransferBody{}, 5, false, &bob.LogPayload{}, false)
+	require.NoError(t, err)
+	assert.False(t, msg.Dividend)
+}
+
+func TestEventMessage_JSON_OmitsDividendWhenFalse(t *testing.T) {
+	msg := EventMessage{}
+
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "dividend")
+}
+
+func TestEventMessage_JSON_IncludesDividendWhenTrue(t *testing.T) {
+	msg := EventMessage{Dividend: true}
+
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"dividend":true`)
 }
 
 func TestEventMessage_JSON_OmitsLastLogForTickWhenFalse(t *testing.T) {
