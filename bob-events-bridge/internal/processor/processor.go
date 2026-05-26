@@ -360,13 +360,14 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 
 		isDividend, err := p.isDividend(payload.Type, parsed)
 		if err != nil {
-			p.logger.Error("Error calculating dividend flag.",
+			p.logger.Warn("Error calculating dividend flag.",
 				zap.Error(err),
 				zap.Uint64("logId", payload.LogID),
 				zap.Uint32("logType", payload.Type),
 				zap.ByteString("body", payload.Body),
 			)
-			return fmt.Errorf("calculating dividend flag for log id [%d]: %w", payload.LogID, err)
+			p.metrics.IncProcessorEventsFailed(payload.Type, "dividend_calculation_error")
+			// we don't error but ignore (design decision)
 		}
 
 		// Convert typed struct to protobuf Struct
