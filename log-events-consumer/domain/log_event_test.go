@@ -84,7 +84,7 @@ func TestInferCategory(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			category, isSpecial, err := inferCategory(tt.transactionHash)
+			category, isSpecial, err := inferTransactionHashCategory(tt.transactionHash)
 
 			if tt.expectError {
 				if err == nil {

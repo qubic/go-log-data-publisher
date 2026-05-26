@@ -16,6 +16,7 @@ type LogEventPtr struct {
 	Timestamp       *uint64         `json:"timestamp"`
 	BodySize        *uint32         `json:"bodySize"`
 	Body            *map[string]any `json:"body"`
+	Dividend        bool            `json:"dividend"`       // default to false if missing
 	LastLogForTick  bool            `json:"lastLogForTick"` // default to 'false' if missing
 }
 
@@ -94,6 +95,7 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 		Timestamp:       *lep.Timestamp,
 		BodySize:        bodySize,
 		Body:            body,
+		Dividend:        lep.Dividend,
 		LastLogForTick:  lep.LastLogForTick,
 	}, nil
 }
