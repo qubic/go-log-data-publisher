@@ -284,6 +284,45 @@ func TestHandleTickStreamResult_IsDividend_TwoSections(t *testing.T) {
 	assert.False(t, msgs[7].Dividend, "event after second dividend section should not be a dividend")
 }
 
+func TestHandleTickStreamResult_IsDividend_ResetOnNewTick(t *testing.T) {
+	pub := &mockPublisher{}
+	p := newTestProcessor(t, pub)
+	p.currentEpoch = 1
+
+	// Tick 100: open dividend section but never close it
+	tick100 := &bob.TickStreamResult{
+		Epoch: 1,
+		Tick:  100,
+		Logs: []bob.LogPayload{
+			makeLogPayload(bob.LogTypeCustomMessage, makeCustomMessageBody(dividendsStart)),
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+		},
+	}
+	err := p.handleTickStreamResult(context.Background(), tick100)
+	require.NoError(t, err)
+
+	firstTick := p.pendingBatch.kafkaMsgs
+	require.Len(t, firstTick, 2)
+	assert.True(t, firstTick[1].Dividend, "event inside after dividend section start should be a dividend")
+
+	// Tick 101: arriving on a new tick should reset the dividend section
+	tick101 := &bob.TickStreamResult{
+		Epoch: 1,
+		Tick:  101,
+		Logs: []bob.LogPayload{
+			makeLogPayload(bob.LogTypeQuTransfer, makeQuTransferBody()),
+		},
+	}
+	err = p.handleTickStreamResult(context.Background(), tick101)
+	require.NoError(t, err)
+
+	// Tick 101's batch is still pending — inspect it directly
+	require.NotNil(t, p.pendingBatch)
+	secondTick := p.pendingBatch.kafkaMsgs
+	require.Len(t, secondTick, 1)
+	assert.False(t, secondTick[0].Dividend, "event on new tick should not be a dividend even if previous tick's dividend section was never closed")
+}
+
 func TestIsNonRetriableKafkaError(t *testing.T) {
 	tests := []struct {
 		name     string
