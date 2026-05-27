@@ -19,6 +19,9 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+const dividendsStart = "6217575821008262227"
+const dividendsEnd = "6217575821008457285"
+
 // tickBatch accumulates events for a single tick before flushing
 type tickBatch struct {
 	tick        uint32
@@ -37,14 +40,15 @@ type Processor struct {
 	publisher kafka.Publisher // nil if Kafka disabled
 	metrics   *metrics.BridgeMetrics
 
-	mu             sync.RWMutex
-	running        bool
-	currentEpoch   uint32
-	lastLogID      int64
-	lastTick       uint32
-	eventsReceived uint64
-	tickEventIndex uint32
-	tickForIndex   uint32 // The tick that tickEventIndex is valid for
+	mu                sync.RWMutex
+	running           bool
+	currentEpoch      uint32
+	lastLogID         int64
+	lastTick          uint32
+	eventsReceived    uint64
+	tickEventIndex    uint32
+	tickForIndex      uint32 // The tick that tickEventIndex is valid for
+	isDividendSection bool
 
 	pendingBatch *tickBatch
 }
@@ -289,7 +293,7 @@ func (p *Processor) handleMessage(ctx context.Context, data []byte) error {
 	return nil
 }
 
-// handleTickStreamResult processes a single tickStream result containing all logs for a tick
+// handleTickStreamResult processes a single tickStream result containing all logs for a tick. Ticks need to be in order.
 func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.TickStreamResult) error {
 	// Check for epoch transition — flush before changing epoch
 	if uint32(result.Epoch) != p.currentEpoch && p.currentEpoch != 0 {
@@ -318,6 +322,7 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		}
 		p.tickEventIndex = 0
 		p.tickForIndex = result.Tick
+		p.isDividendSection = false
 	}
 
 	// Reset index if processing a different tick than what tickEventIndex was recovered/set for.
@@ -353,6 +358,18 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 			return fmt.Errorf("failed to parse event body for log type %d: %w", payload.Type, err)
 		}
 
+		isDividend, err := p.isDividend(payload.Type, parsed)
+		if err != nil {
+			p.logger.Warn("Error calculating dividend flag.",
+				zap.Error(err),
+				zap.Uint64("logId", payload.LogID),
+				zap.Uint32("logType", payload.Type),
+				zap.ByteString("body", payload.Body),
+			)
+			p.metrics.IncProcessorEventsFailed(payload.Type, "dividend_calculation_error")
+			// we don't error but ignore (design decision)
+		}
+
 		// Convert typed struct to protobuf Struct
 		var bodyStruct *structpb.Struct
 		if parsed != nil {
@@ -369,7 +386,7 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 		// Build kafka message (if publisher configured)
 		var kafkaMsg *kafka.EventMessage
 		if p.publisher != nil {
-			kafkaMsg, err = kafka.BuildEventMessage(&payload, parsed, p.tickEventIndex, isLastLog)
+			kafkaMsg, err = kafka.BuildEventMessage(parsed, p.tickEventIndex, isLastLog, &payload, isDividend)
 			if err != nil {
 				return fmt.Errorf("failed to build kafka message: %w", err)
 			}
@@ -422,6 +439,38 @@ func (p *Processor) handleTickStreamResult(ctx context.Context, result *bob.Tick
 	}
 
 	return nil
+}
+
+func (p *Processor) isDividend(logType uint32, parsed interface{}) (bool, error) {
+	if isCustomMessage(logType) {
+		customMessageBody, ok := parsed.(*bob.CustomMessageBody)
+		if ok {
+			if isStartDividends(customMessageBody) {
+				p.isDividendSection = true
+				return false, nil // start section message is not a dividend log
+			} else if isEndDividends(customMessageBody) {
+				p.isDividendSection = false
+				return false, nil // end section message is not a dividend log
+			}
+		} else { // would be a strange case that needs investigation
+			p.logger.Warn("Failed to cast custom message body.", zap.Uint32("logType", logType), zap.Any("parsed", parsed))
+			return false, fmt.Errorf("failed to cast custom message body with log type [%d]", logType)
+		}
+	}
+	// we don't care about the type in the dividend section. only the start and end section messages are excluded.
+	return p.isDividendSection, nil
+}
+
+func isCustomMessage(logType uint32) bool {
+	return logType == bob.LogTypeCustomMessage
+}
+
+func isStartDividends(customMessageBody *bob.CustomMessageBody) bool {
+	return customMessageBody.CustomMessage == dividendsStart
+}
+
+func isEndDividends(customMessageBody *bob.CustomMessageBody) bool {
+	return customMessageBody.CustomMessage == dividendsEnd
 }
 
 // flushBatch publishes and stores the pending batch, then resets it.

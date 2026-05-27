@@ -11,6 +11,8 @@ import (
 	"github.com/qubic/go-node-connector/types"
 )
 
+const QuTransferType int16 = 0
+
 // Special system transactions
 // Qubic supports, per tick, 1024 regular user transactions and a couple special
 // 'transactions' (special not transaction-related event logs).
@@ -24,6 +26,8 @@ var sysTransactionMap = map[string]uint8{
 	"SC_END_EPOCH_TX":    5,
 	"SC_NOTIFICATION_TX": 6,
 }
+
+const CategoryInDividendSection uint8 = 7
 
 // LogEvent data received from kafka that is already validated for missing fields.
 // Some data types are a bit oversized but correspond with the elastic template.
@@ -40,6 +44,7 @@ type LogEvent struct {
 	BodySize        uint32         `json:"bodySize"`
 	Body            map[string]any `json:"body"`
 	LastLogForTick  bool           `json:"lastLogForTick"`
+	Dividend        bool           `json:"dividend"`
 }
 
 func (le *LogEvent) IsSupported(supportedMap map[uint64][]int16) bool {
@@ -90,18 +95,13 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 		return LogEventElastic{}, fmt.Errorf("invalid zero value field(s): %v", invalid)
 	}
 
-	category, isCategorized, err := inferCategory(lee.TransactionHash)
+	err := appendCategories(&lee, le)
 	if err != nil {
-		return LogEventElastic{}, fmt.Errorf("checking if transactionHash is special: %w", err)
-	}
-	if isCategorized {
-		// We want to omit transactionHash field if tx is special, and instead set the category
-		lee.TransactionHash = ""
-		lee.Categories = Categories{category}
+		return LogEventElastic{}, fmt.Errorf("appending categories: %w", err)
 	}
 
 	switch lee.LogType {
-	case 0:
+	case QuTransferType:
 		err = handleQuTransfer(&lee, le.Body)
 		if err != nil {
 			return LogEventElastic{}, fmt.Errorf("handling qu transfer: %w", err)
@@ -176,7 +176,27 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	return lee, nil
 }
 
-func inferCategory(transactionHash string) (byte, bool, error) {
+func appendCategories(lee *LogEventElastic, le *LogEvent) error {
+	// mark, if log has special transaction hash
+	hashCategory, isHashCategorized, err := inferTransactionHashCategory(lee.TransactionHash)
+	if err != nil {
+		return fmt.Errorf("checking if transactionHash contains category: %w", err)
+	}
+	if isHashCategorized {
+		// we want to omit transactionHash field if tx is special, and instead set the category
+		lee.TransactionHash = ""
+		lee.Categories = append(lee.Categories, hashCategory)
+	}
+
+	// mark, if log is in dividend section
+	if le.Dividend {
+		lee.Categories = append(lee.Categories, CategoryInDividendSection)
+	}
+	return nil
+}
+
+// inferTransactionHashCategory checks if a category is encoded into transaction hash
+func inferTransactionHashCategory(transactionHash string) (byte, bool, error) {
 
 	if len(transactionHash) == 0 { // all good
 		return 0, false, nil

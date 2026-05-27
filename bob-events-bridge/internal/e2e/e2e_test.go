@@ -1108,6 +1108,85 @@ func TestE2E_KafkaPublishing(t *testing.T) {
 	assert.Equal(t, int64(1000), msg.Body["amount"])
 }
 
+// TestE2E_DividendFlag tests that events inside a dividend section are marked with Dividend=true
+// and that the start/end markers and events outside the section are not.
+func TestE2E_DividendFlag(t *testing.T) {
+	const dividendsStart = "6217575821008262227"
+	const dividendsEnd = "6217575821008457285"
+
+	mockBob := NewMockBobServer(145, 22000000)
+	defer mockBob.Close()
+
+	tempDir := t.TempDir()
+	storageMgr, err := storage.NewManager(tempDir, 0, zap.NewNop())
+	require.NoError(t, err)
+
+	mockKafka := kafka.NewMockPublisher()
+	cfg := CreateTestConfig(mockBob, tempDir)
+	proc := processor.NewProcessor(cfg, storageMgr, zap.NewNop(), mockKafka, newTestMetrics())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := startProcessor(ctx, proc)
+
+	defer func() {
+		stopProcessor(cancel, proc, done)
+		_ = storageMgr.Close()
+	}()
+
+	_, err = mockBob.WaitForSubscription(5 * time.Second)
+	require.NoError(t, err)
+
+	transferBody := map[string]any{
+		"from":   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"to":     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"amount": 100,
+	}
+
+	logs := []bob.LogPayload{
+		// Before dividend section — not a dividend
+		CreateLogPayload(145, 22000001, 1, bob.LogTypeQuTransfer, transferBody),
+		// Start dividend marker — not a dividend itself
+		CreateLogPayload(145, 22000001, 2, bob.LogTypeCustomMessage, map[string]any{"customMessage": dividendsStart}),
+		// Inside dividend section — dividend
+		CreateLogPayload(145, 22000001, 3, bob.LogTypeQuTransfer, transferBody),
+		// End dividend marker — not a dividend itself
+		CreateLogPayload(145, 22000001, 4, bob.LogTypeCustomMessage, map[string]any{"customMessage": dividendsEnd}),
+		// After dividend section — not a dividend
+		CreateLogPayload(145, 22000001, 5, bob.LogTypeQuTransfer, transferBody),
+	}
+
+	err = mockBob.SendTickStreamResult(bob.TickStreamResult{
+		Epoch:        145,
+		Tick:         22000001,
+		TotalLogs:    5,
+		FilteredLogs: 5,
+		Logs:         logs,
+	})
+	require.NoError(t, err)
+	mockBob.SendCatchUpComplete()
+
+	// Wait for all events to be stored
+	WaitForCondition(t, 5*time.Second, 50*time.Millisecond, func() bool {
+		_, events, _ := storageMgr.GetEventsForTick(22000001)
+		return len(events) >= 5
+	}, "all 5 events should be stored")
+
+	msgs := mockKafka.Messages()
+	require.Len(t, msgs, 5)
+
+	// Index messages by LogID for readable assertions
+	byLogID := make(map[uint64]*kafka.EventMessage, len(msgs))
+	for _, m := range msgs {
+		byLogID[m.LogID] = m
+	}
+
+	assert.False(t, byLogID[1].Dividend, "event before dividend section should not be a dividend")
+	assert.False(t, byLogID[2].Dividend, "dividendsStart marker should not be a dividend")
+	assert.True(t, byLogID[3].Dividend, "event inside dividend section should be a dividend")
+	assert.False(t, byLogID[4].Dividend, "dividendsEnd marker should not be a dividend")
+	assert.False(t, byLogID[5].Dividend, "event after dividend section should not be a dividend")
+}
+
 // logTypeTestCase defines a single log type e2e test
 type logTypeTestCase struct {
 	name        string

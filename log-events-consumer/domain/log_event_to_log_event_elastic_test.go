@@ -1073,6 +1073,53 @@ func TestLogEvent_ToLogEventElastic_OracleQueryStatusChange_Error(t *testing.T) 
 	}
 }
 
+func TestLogEvent_ToLogEventElastic_DividendCategory(t *testing.T) {
+	base := LogEvent{
+		Epoch:           100,
+		TickNumber:      200,
+		Timestamp:       1234567890,
+		TransactionHash: validTxHash,
+		LogId:           300,
+		LogDigest:       "digest",
+		Type:            0,
+		Body: map[string]any{
+			"source":      "source-identity",
+			"destination": "dest-identity",
+			"amount":      float64(100),
+		},
+	}
+
+	t.Run("Dividend=true adds CategoryDividend to categories", func(t *testing.T) {
+		le := base
+		le.Dividend = true
+
+		lee, err := le.ToLogEventElastic()
+		require.NoError(t, err)
+		assert.Contains(t, lee.Categories, CategoryInDividendSection)
+	})
+
+	t.Run("Other category and Dividend=true adds CategoryDividend to categories", func(t *testing.T) {
+		le := base
+		le.Dividend = true
+		le.TransactionHash = "SC_END_TICK_TX_12345"
+
+		lee, err := le.ToLogEventElastic()
+		require.NoError(t, err)
+		assert.Len(t, lee.Categories, 2)
+		assert.Contains(t, lee.Categories, CategoryInDividendSection)
+		assert.Contains(t, lee.Categories, uint8(4))
+	})
+
+	t.Run("Dividend=false does not add CategoryDividend to categories", func(t *testing.T) {
+		le := base
+		le.Dividend = false
+
+		lee, err := le.ToLogEventElastic()
+		require.NoError(t, err)
+		assert.NotContains(t, lee.Categories, CategoryInDividendSection)
+	})
+}
+
 func TestLogEvent_ToLogEventElastic_OracleSubscriberLogMessage_Error(t *testing.T) {
 	tests := []struct {
 		name   string
