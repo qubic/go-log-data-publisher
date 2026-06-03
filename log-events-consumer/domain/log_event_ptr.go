@@ -56,9 +56,9 @@ func (lep LogEventPtr) ToLogEvent() (LogEvent, error) {
 	if *lep.TickNumber == 0 {
 		missing = append(missing, "tickNumber")
 	}
-	if *lep.LogId == 0 {
+	/*if *lep.LogId == 0 {
 		missing = append(missing, "logId")
-	}
+	}*/
 	if *lep.LogDigest == "" {
 		missing = append(missing, "logDigest")
 	}

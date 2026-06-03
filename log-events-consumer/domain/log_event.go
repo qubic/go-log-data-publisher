@@ -82,9 +82,9 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 	if lee.TickNumber == 0 {
 		invalid = append(invalid, "tickNumber")
 	}
-	if lee.LogId == 0 {
+	/*if lee.LogId == 0 {
 		invalid = append(invalid, "logId")
-	}
+	}*/
 	if lee.Timestamp == 0 {
 		invalid = append(invalid, "timestamp")
 	}

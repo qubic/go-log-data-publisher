@@ -179,7 +179,7 @@ func TestLogEventPtr_ToLogEvent_InvalidZeroFields(t *testing.T) {
 	assert.Contains(t, err.Error(), "zero value field(s)")
 	assert.Contains(t, err.Error(), "epoch")
 	assert.Contains(t, err.Error(), "tickNumber")
-	assert.Contains(t, err.Error(), "logId")
+	assert.NotContains(t, err.Error(), "logId")
 	assert.Contains(t, err.Error(), "logDigest")
 	// Disabled for the time being.
 	//assert.Contains(t, err.Error(), "timestamp")
