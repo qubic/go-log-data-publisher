@@ -173,6 +173,12 @@ func (le *LogEvent) ToLogEventElastic() (LogEventElastic, error) {
 
 	}
 
+	// TODO: Remove
+	if lee.LogId == 0 {
+		fmt.Println("===== DEBUG =====")
+		fmt.Printf("LOG ID 0 EVENT: %v\n", lee)
+	}
+
 	return lee, nil
 }
 
