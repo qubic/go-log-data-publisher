@@ -116,7 +116,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, int, error) {
 
 		logEvent, err := raw.ToLogEvent()
 		if err != nil {
-			log.Printf("[ERROR] converting raw log event [%v]: %v", raw, err)
+			log.Printf("[ERROR] converting raw log event [%+v]: %v", raw, err)
 			return -1, -1, fmt.Errorf("converting to log event: %w", err)
 		}
 
