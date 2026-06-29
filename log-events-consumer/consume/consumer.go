@@ -116,7 +116,11 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, int, error) {
 
 		logEvent, err := raw.ToLogEvent()
 		if err != nil {
-			log.Printf("[ERROR] converting raw log event [%+v]: %v", raw, err)
+			b, err := json.Marshal(raw)
+			if err != nil {
+				return -1, -1, fmt.Errorf("converting raw log event to json: %w", err)
+			}
+			log.Printf("[ERROR] converting raw log event [%s]: %v", b, err)
 			return -1, -1, fmt.Errorf("converting to log event: %w", err)
 		}
 
