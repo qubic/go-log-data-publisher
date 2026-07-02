@@ -26,8 +26,8 @@ type rpcResponse struct {
 //	OUT=/home/linckode/asdasdasdasd/kafkaMessages.ndjson \
 //	  go test ./internal/kafka/ -run TestGenerateKafkaMessages -v
 func TestGenerateKafkaMessages(t *testing.T) {
-	inPath := os.Getenv("IN")
-	outPath := os.Getenv("OUT")
+	inPath := "/path/to/file.json"
+	outPath := "/path/to/file.ndjson"
 	if inPath == "" {
 		t.Skip("set IN=<path to toIngest2.json> to run")
 	}

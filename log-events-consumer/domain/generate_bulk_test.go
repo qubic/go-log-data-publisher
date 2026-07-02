@@ -1,4 +1,4 @@
-//go:build log_reconstruction
+////go:build log_reconstruction
 
 // This file is only meant as a utility to transform the kafka to elastic format for manually ingesting log-events
 
@@ -7,6 +7,8 @@ package domain
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -22,12 +24,10 @@ import (
 //	INDEX=qubic-event-logs-write \
 //	  go test ./domain/ -run TestGenerateBulk -v
 func TestGenerateBulk(t *testing.T) {
-	inPath := os.Getenv("IN")
-	outPath := os.Getenv("OUT")
+	inPath := "/path/to/file.json"
+	outPath := "/path/to/file.ndjson"
 	indexName := os.Getenv("INDEX")
-	if inPath == "" {
-		t.Skip("set IN=<path to kafkaMessages.ndjson> to run")
-	}
+
 	if indexName == "" {
 		indexName = "qubic-event-logs-write"
 	}
@@ -39,7 +39,7 @@ func TestGenerateBulk(t *testing.T) {
 	defer f.Close()
 
 	// supported map: only type present in this dataset is QU_TRANSFER (0)
-	supported := map[uint64][]int16{0: {QuTransferType}}
+	supported := ParseSupportedTypes(`{"0":[0,1,2,3,4,5,6,8,9,10,11,12,13,14,15,255]}`)
 
 	var bulk strings.Builder
 	indexed, total := 0, 0
@@ -102,4 +102,14 @@ func TestGenerateBulk(t *testing.T) {
 	} else {
 		t.Logf("\n%s", bulk.String())
 	}
+}
+
+func ParseSupportedTypes(mapStr string) map[uint64][]int16 {
+	fmt.Printf("main: supported log types input: %s\n", mapStr)
+	var logTypes map[uint64][]int16
+	if err := json.Unmarshal([]byte(mapStr), &logTypes); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("main: parsed supported log types: %v\n", logTypes)
+	return logTypes
 }
