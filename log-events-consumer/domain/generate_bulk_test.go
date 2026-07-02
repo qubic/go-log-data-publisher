@@ -1,4 +1,4 @@
-////go:build log_reconstruction
+//go:build log_reconstruction
 
 // This file is only meant as a utility to transform the kafka to elastic format for manually ingesting log-events
 
