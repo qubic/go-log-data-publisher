@@ -48,6 +48,8 @@ type Consumer struct {
 	pollMaxRecords    int
 	highestTick       uint32
 	currentEpoch      uint32
+	consumedTick      uint32
+	consumedEpoch     uint32
 }
 
 type ConsumerOptions struct {
@@ -83,7 +85,7 @@ func (c *Consumer) Consume(ctx context.Context) error {
 				return fmt.Errorf("consuming batch: %w", err)
 			}
 			if records > 0 {
-				log.Printf("Processed: [%d]. Indexed: [%d]. Highest tick: [%d]", records, docs, c.highestTick)
+				log.Printf("Processed: [%d]. Indexed: [%d]. Highest ingested tick: [%d]. Last consumed tick: [%d]", records, docs, c.highestTick, c.consumedTick)
 			}
 
 		}
@@ -122,6 +124,11 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, int, error) {
 			}
 			log.Printf("[ERROR] converting raw log event [%s]: %v", b, err)
 			return -1, -1, fmt.Errorf("converting to log event: %w", err)
+		}
+		// Track consumption progress independently of filtering.
+		if uint32(logEvent.TickNumber) > c.consumedTick {
+			c.consumedTick = uint32(logEvent.TickNumber)
+			c.consumedEpoch = logEvent.Epoch
 		}
 
 		// basic filters before elastic conversion
@@ -168,6 +175,7 @@ func (c *Consumer) consumeBatch(ctx context.Context) (int, int, error) {
 		}
 	}
 	c.consumeMetrics.SetProcessedTick(c.currentEpoch, c.highestTick)
+	c.consumeMetrics.SetConsumedTick(c.consumedEpoch, c.consumedTick)
 
 	err := c.kafkaClient.CommitUncommittedOffsets(ctx)
 	if err != nil {
