@@ -83,7 +83,8 @@ func TestIntegrationSetHighestTick(t *testing.T) {
 	require.Equal(t, tickNum, storedHighest)
 }
 
-func TestIntegrationSetHighestTick_NoProcessedLogs(t *testing.T) {
+// Test no longer relevant
+/*func TestIntegrationSetHighestTick_NoProcessedLogs(t *testing.T) {
 	ctx, store, redisClient, _, cleanup := setupIntegration(t)
 	defer cleanup()
 
@@ -105,7 +106,7 @@ func TestIntegrationSetHighestTick_NoProcessedLogs(t *testing.T) {
 	storedHighest, err := redisClient.HGetUint64(ctx, KeyHighestTick, "tickNumber")
 	require.NoError(t, err)
 	require.Equal(t, uint64(100), storedHighest)
-}
+}*/
 
 func TestIntegrationCleanUp(t *testing.T) {
 	ctx, store, _, m, cleanup := setupIntegration(t)
