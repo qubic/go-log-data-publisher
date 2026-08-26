@@ -323,6 +323,27 @@ func TestHandleTickStreamResult_IsDividend_ResetOnNewTick(t *testing.T) {
 	assert.False(t, secondTick[0].Dividend, "event on new tick should not be a dividend even if previous tick's dividend section was never closed")
 }
 
+// An unparseable body must fail the tick so the processor reconnects and bob resends,
+// rather than storing and publishing an event with the payload dropped.
+func TestHandleTickStreamResult_UnparseableCustomMessageReturnsError(t *testing.T) {
+	pub := &mockPublisher{}
+	p := newTestProcessor(t, pub)
+	p.currentEpoch = 1
+
+	result := &bob.TickStreamResult{
+		Epoch: 1,
+		Tick:  100,
+		Logs: []bob.LogPayload{
+			makeLogPayload(bob.LogTypeCustomMessage, json.RawMessage(`{"somethingElse":"x"}`)),
+		},
+	}
+
+	err := p.handleTickStreamResult(context.Background(), result)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "neither customMessage nor hex")
+	assert.Nil(t, p.pendingBatch, "event must not be buffered when its body cannot be parsed")
+}
+
 func TestIsNonRetriableKafkaError(t *testing.T) {
 	tests := []struct {
 		name     string

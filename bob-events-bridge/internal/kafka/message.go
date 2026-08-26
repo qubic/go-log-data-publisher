@@ -129,9 +129,14 @@ func TransformEventBody(eventType uint32, body interface{}) (map[string]any, err
 		}, nil
 
 	case *bob.CustomMessageBody:
-		return map[string]any{
-			"customMessage": b.CustomMessage,
-		}, nil
+		transformed := map[string]any{}
+		if b.CustomMessage != "" {
+			transformed["customMessage"] = b.CustomMessage
+		}
+		if b.Hex != "" {
+			transformed["hex"] = b.Hex
+		}
+		return transformed, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported event body type: %T", body)

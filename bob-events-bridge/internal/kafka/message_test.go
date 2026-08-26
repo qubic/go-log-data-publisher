@@ -304,6 +304,40 @@ func TestTransformEventBody_CustomMessage(t *testing.T) {
 	}
 }
 
+func TestTransformEventBody_CustomMessageHex(t *testing.T) {
+	body := &bob.CustomMessageBody{
+		Hex: "414e545f534f4c55deadbeef",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeCustomMessage, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"hex": "414e545f534f4c55deadbeef",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTransformEventBody_CustomMessageBothFields(t *testing.T) {
+	body := &bob.CustomMessageBody{
+		CustomMessage: "12345",
+		Hex:           "414e545f534f4c55deadbeef",
+	}
+
+	result, err := TransformEventBody(bob.LogTypeCustomMessage, body)
+	require.NoError(t, err)
+
+	expected := map[string]any{
+		"customMessage": "12345",
+		"hex":           "414e545f534f4c55deadbeef",
+	}
+	if diff := cmp.Diff(expected, result); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestTransformEventBody_UnknownLogTypeHexBody(t *testing.T) {
 	body := &bob.HexBody{
 		Hex: "deadbeef0123456789abcdef",

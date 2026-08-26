@@ -48,6 +48,21 @@ ENVIRONMENT
   QUBIC_LOG_EVENTS_CONSUMER_METRICS_PORT              <int>                 (default: 9999)  
 ```
 
+## Custom messages (type 255)
+
+Bob sends custom message bodies in one of two shapes, never both, and they map to
+different elastic fields:
+
+| Kafka body | Meaning | Elastic field |
+|---|---|---|
+| `{"customMessage": "6217575821008262227"}` | message of 8 bytes or fewer, packed little-endian into a uint64 | `customMessage` (number) |
+| `{"hex": "414e545f534f4c55..."}` | longer message, sent as a raw hex dump | `rawPayload` (base64 of the decoded bytes) |
+
+The hex form is decoded the same way as types 4-7 and 9-10 and reuses the existing
+`rawPayload` field, so it needs no new index mapping. A type 255 body with neither field
+fails conversion, which stops the consumer without committing offsets rather than indexing
+a document with the payload missing.
+
 ## Tests
 
 The shared test data is located in `testutils/testdata/` and includes:

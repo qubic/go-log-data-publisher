@@ -475,11 +475,25 @@ Every event published to Kafka follows this envelope structure:
 
 #### Type 255 — custom_message
 
+Custom messages come in one of two shapes, never both. A message of 8 bytes or fewer is
+sent as those bytes packed little-endian into a uint64 and rendered as a decimal string:
+
 ```json
 {
-  "customMessage": "12345"
+  "customMessage": "4850183582582395987"
 }
 ```
+
+A longer message is sent as a raw hex dump instead:
+
+```json
+{
+  "hex": "414e545f534f4c55de00a293daa89029b1d51f3ed1841c66..."
+}
+```
+
+A type 255 event carrying neither field is treated as a parse failure rather than
+published with an empty body.
 
 #### Unknown types (default)
 
