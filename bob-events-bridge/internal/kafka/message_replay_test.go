@@ -224,6 +224,11 @@ func TestTransformEventBodyMap_NoRenamePassthrough(t *testing.T) {
 			eventType: bob.LogTypeCustomMessage,
 			body:      map[string]any{"customMessage": "12345"},
 		},
+		{
+			name:      "CustomMessageHex",
+			eventType: bob.LogTypeCustomMessage,
+			body:      map[string]any{"hex": "414e545f534f4c55deadbeef"},
+		},
 	}
 
 	for _, tc := range cases {

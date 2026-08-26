@@ -1630,6 +1630,22 @@ func TestE2E_LogType255_CustomMessage(t *testing.T) {
 	})
 }
 
+func TestE2E_LogType255_CustomMessageHex(t *testing.T) {
+	runLogTypeE2ETest(t, logTypeTestCase{
+		name:      "custom_message_hex",
+		eventType: 255,
+		bobBody: map[string]any{
+			"hex": "414e545f534f4c55deadbeef",
+		},
+		grpcChecks: map[string]any{
+			"hex": "414e545f534f4c55deadbeef",
+		},
+		kafkaChecks: map[string]any{
+			"hex": "414e545f534f4c55deadbeef",
+		},
+	})
+}
+
 func TestE2E_UnknownLogType_Passthrough(t *testing.T) {
 	runLogTypeE2ETest(t, logTypeTestCase{
 		name:      "unknown_log_type_999",

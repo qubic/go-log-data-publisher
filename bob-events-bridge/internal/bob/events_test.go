@@ -252,6 +252,9 @@ func TestParseEventBody_HexBody(t *testing.T) {
 	}
 }
 
+// Real bob payload for a long custom message: 8-byte "ANT_SOLU" tag followed by 84 bytes.
+const customMessageHexSample = "414e545f534f4c55de00a293daa89029b1d51f3ed1841c66defcefbade295e7847a99ec6bf421ab8010a002b9f25b87cff7d6b46db48bf4e45afe309eb35cfaf0803a1e0ff3777fb00000000ffffffff5c1390047f0f000000000000"
+
 func TestParseEventBody_CustomMessage(t *testing.T) {
 	body := json.RawMessage(`{
 		"customMessage": "12345"
@@ -263,6 +266,35 @@ func TestParseEventBody_CustomMessage(t *testing.T) {
 	parsed, ok := result.(*CustomMessageBody)
 	require.True(t, ok)
 	assert.Equal(t, "12345", parsed.CustomMessage)
+	assert.Empty(t, parsed.Hex)
+}
+
+func TestParseEventBody_CustomMessage_Hex(t *testing.T) {
+	body := json.RawMessage(`{
+		"hex": "` + customMessageHexSample + `"
+	}`)
+
+	result, err := ParseEventBody(LogTypeCustomMessage, body)
+	require.NoError(t, err)
+
+	parsed, ok := result.(*CustomMessageBody)
+	require.True(t, ok)
+	assert.Equal(t, customMessageHexSample, parsed.Hex)
+	assert.Empty(t, parsed.CustomMessage)
+}
+
+func TestParseEventBody_CustomMessage_NeitherField(t *testing.T) {
+	bodies := []string{
+		`{"somethingElse": "x"}`,
+		`{"customMessage": ""}`,
+	}
+
+	for _, body := range bodies {
+		result, err := ParseEventBody(LogTypeCustomMessage, json.RawMessage(body))
+		require.Error(t, err, "body %s", body)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "neither customMessage nor hex")
+	}
 }
 
 func TestParseEventBody_UnknownLogType(t *testing.T) {
@@ -307,4 +339,15 @@ func TestEventBodyToMap(t *testing.T) {
 	assert.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", result["from"])
 	assert.Equal(t, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", result["to"])
 	assert.Equal(t, float64(1000), result["amount"])
+}
+
+// The stored body must carry only the field bob sent, so it keeps matching the kafka body.
+func TestEventBodyToMap_CustomMessageOmitsEmptyFields(t *testing.T) {
+	hexBody, err := EventBodyToMap(&CustomMessageBody{Hex: customMessageHexSample})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"hex": customMessageHexSample}, hexBody)
+
+	decimalBody, err := EventBodyToMap(&CustomMessageBody{CustomMessage: "4850183582582395987"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"customMessage": "4850183582582395987"}, decimalBody)
 }
