@@ -497,6 +497,44 @@ func TestLogEvent_ToLogEventElastic_CustomMessage_Success(t *testing.T) {
 	assert.Equal(t, uint64(1234567890), *lee.CustomMessage)
 }
 
+func TestLogEvent_ToLogEventElastic_CustomMessage_Hex_Success(t *testing.T) {
+	le := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Timestamp:  1234567890,
+		LogId:      300,
+		LogDigest:  "digest",
+		Type:       255,
+		Body: map[string]any{
+			"hex": "414e545f534f4c55deadbeef",
+		},
+	}
+
+	lee, err := le.ToLogEventElastic()
+	require.NoError(t, err)
+
+	assert.Equal(t, []byte("ANT_SOLU\xde\xad\xbe\xef"), lee.RawPayload)
+	assert.Nil(t, lee.CustomMessage)
+}
+
+func TestLogEvent_ToLogEventElastic_CustomMessage_Hex_Error(t *testing.T) {
+	le := LogEvent{
+		Epoch:      100,
+		TickNumber: 200,
+		Timestamp:  1234567890,
+		LogId:      300,
+		LogDigest:  "digest",
+		Type:       255,
+		Body: map[string]any{
+			"hex": "not-hex",
+		},
+	}
+
+	_, err := le.ToLogEventElastic()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "converting hex to raw payload")
+}
+
 func TestLogEvent_ToLogEventElastic_CustomMessage_Error(t *testing.T) {
 	le := LogEvent{
 		Epoch:      100,

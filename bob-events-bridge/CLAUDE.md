@@ -337,11 +337,26 @@ Events with `"ok": false` are skipped by the processor.
 
 **Type 255 — custom_message**
 **bob format & kafka format** (no field renames)
+
+Bob sends one of two shapes, never both. Messages of 8 bytes or fewer arrive as the
+bytes packed little-endian into a uint64, rendered as a decimal string:
 ```json
 {
-  "customMessage": "<string>"
+  "customMessage": "<decimal_uint64_as_string>"
 }
 ```
+Longer messages arrive as a raw hex dump instead, the same way types 9-10 do:
+```json
+{
+  "hex": "<hex_string>"
+}
+```
+Both shapes parse into `bob.CustomMessageBody` and pass through to kafka and storage
+unchanged, carrying only the field bob sent. A type 255 body with neither field is a
+parse error, which fails the tick and forces a reconnect so bob resends — deliberately
+noisier than dropping a payload we cannot represent. The dividend section markers
+(`dividendsStart`/`dividendsEnd` in the processor) are exactly 8 bytes, so they always
+arrive in the decimal form and dividend detection only matches against it.
 
 
 **Kafka entire message format**

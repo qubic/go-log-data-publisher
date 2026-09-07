@@ -625,18 +625,22 @@ func handleOracleSubscriberLogMessage(lee *LogEventElastic, body map[string]any)
 	return nil
 }
 
+// Bob sends messages of 8 bytes or fewer as a packed uint64 decimal string in
+// customMessage, and longer ones as a hex dump. Exactly one field is present.
 func handleCustomMessage(lee *LogEventElastic, body map[string]any) error {
-	var err error
+	if _, ok := body["hex"]; ok {
+		return handleRaw(lee, body)
+	}
 
 	msg, ok := body["customMessage"].(string)
 	if !ok {
 		return fmt.Errorf("missing or invalid custom message")
 	}
 	customMessageUint, err := strconv.ParseUint(msg, 10, 64)
-	lee.CustomMessage = &customMessageUint
 	if err != nil {
 		return fmt.Errorf("converting custom message [%s]: %w", msg, err)
 	}
+	lee.CustomMessage = &customMessageUint
 
 	return nil
 }

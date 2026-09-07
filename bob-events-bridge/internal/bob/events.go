@@ -147,8 +147,11 @@ type HexBody struct {
 }
 
 // CustomMessageBody represents the body of a custom_message event (log type 255)
+// Bob sends messages of 8 bytes or fewer as a packed uint64 decimal string in
+// customMessage, and longer ones as a raw hex dump in hex.
 type CustomMessageBody struct {
-	CustomMessage string `json:"customMessage"`
+	CustomMessage string `json:"customMessage,omitempty"`
+	Hex           string `json:"hex,omitempty"`
 }
 
 // ParseEventBody unmarshals the raw body JSON into the typed struct for the
@@ -195,6 +198,10 @@ func ParseEventBody(logType uint32, body json.RawMessage) (interface{}, error) {
 
 	if err := json.Unmarshal(body, target); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal body for log type %d: %w", logType, err)
+	}
+
+	if cm, ok := target.(*CustomMessageBody); ok && cm.CustomMessage == "" && cm.Hex == "" {
+		return nil, fmt.Errorf("custom message body has neither customMessage nor hex: %s", body)
 	}
 
 	return target, nil
