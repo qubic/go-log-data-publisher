@@ -2,6 +2,13 @@
 
 A Go service that bridges events from a Qubic bob blockchain node to client applications via gRPC and REST APIs.
 
+> [!WARNING]
+> **The on-disk database format changed in `v0.9.0`, and there is no migration path for existing data.**
+>
+> Databases written by `v0.8.0` and earlier are **not compatible** with `v0.9.0` and later. Starting a `v0.9.0+` build against an older data directory may **crash the service**, **corrupt the stored data**, or both.
+>
+> **`v0.9.0` and later must be started with an empty data directory.**
+
 ## Overview
 
 bob-events-bridge connects to a bob node via WebSocket, ingests real-time blockchain events, stores them in epoch-partitioned databases, and exposes them through a dual gRPC/REST API. The service is designed for reliability with automatic crash recovery, event deduplication, and seamless epoch transitions.
