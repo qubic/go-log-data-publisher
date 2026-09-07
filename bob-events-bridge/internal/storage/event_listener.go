@@ -3,7 +3,7 @@ package storage
 import (
 	"log"
 
-	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/v2"
 )
 
 type PebbleEventListener struct {
