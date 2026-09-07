@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/v2"
 	eventsbridge "github.com/qubic/bob-events-bridge/api/events-bridge/v1"
 	"google.golang.org/protobuf/proto"
 )
