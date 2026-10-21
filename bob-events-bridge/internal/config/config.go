@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -81,7 +82,7 @@ func Parse() (*Config, error) {
 
 	help, err := conf.Parse("BOB_EVENTS", &cfg)
 	if err != nil {
-		if err == conf.ErrHelpWanted {
+		if errors.Is(err, conf.ErrHelpWanted) || errors.Is(err, conf.ErrVersionWanted) {
 			fmt.Println(help)
 			os.Exit(0)
 		}
