@@ -111,6 +111,8 @@ func run() error {
 		kgo.ConsumerGroup(cfg.Broker.ConsumerGroup),
 		kgo.BlockRebalanceOnPoll(),
 		kgo.DisableAutoCommit(),
+		// franz-go v1.22 changed the default to RewindOffset(time.Minute); keep re-reading from the start on broker data loss.
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		kgo.WithLogger(kgo.BasicLogger(os.Stdout, kgo.LogLevelInfo, nil)),
 	)
 	if err != nil {
