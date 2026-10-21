@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qubic/go-node-connector/types"
+	"github.com/qubic/go-node-connector/v2/types"
 )
 
 const QuTransferType int16 = 0
